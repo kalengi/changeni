@@ -262,6 +262,47 @@ div.changeni_donation_box_content span.action_links {
 /* @end */
 
 
+/*@ Shopping cart bar */
+
+div#changeni_cart {
+    z-index: 1001 !important;
+    background: url('images/cart_bkg.gif') top left !important;
+    color: #ffffff !important;
+    font: 12px "Lucida Grande","Lucida Sans Unicode",Tahoma,Verdana !important;
+    height: 28px !important;
+    left: 0 !important;
+    margin: 0 !important;
+    position: absolute !important;
+    text-align: left !important;
+    top: 0 !important;
+    width: 100% !important;
+}
+
+div#changeni_cart a.main_site_link {
+    float: left;
+    text-decoration: none;
+}
+
+img#changeni_logo {
+    float: left;
+    height: 28px;
+
+}
+
+div#changeni_cart h2 {
+    float: left;
+
+}
+
+div.changeni_cart_info {
+    float: right;
+    padding-right: 10px;
+}
+
+
+/* @end */
+
+
 
 
 

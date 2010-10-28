@@ -23,29 +23,29 @@
                         },
 		addToCart : function(f){
                             f=jQ(f);
-                            debugger;
                             var data=f.serialize();
+                            //var url=js_changeni_site_root + "wp-admin/admin-ajax.php";
+                            var url=changeniJsData.ajaxUrl;
+                            debugger;
                             jQ.ajax({
-                                    url: "/wp-admin/admin-ajax.php",
+                                    url: url,
                                     type: 'POST',
                                     data: data,
-                                    dataType: 'html',
+                                    dataType: 'json',
                                     success:function(result, status, XMLHttpRequest){
-                                            var s=jQ("#info_message");
-                                            //var r=result.replace(/&#8203;/gi,'');
-                                            s.html(result);
                                             debugger;
-                                            //var testUrl = s.find("a:last");
-                                            //testUrl.attr("target", "_blank");
-                                            //s.html('');
-                                            //s.append(testUrl);
-                                            s.show();
+
+                                            jQ("#info_message").html(result.message);
+                                            jQ("#changeni_item_count").html(result.totalItems);
+                                            jQ("#changeni_amount_total").html(result.totalAmount);
+
                                             jQ("#ajax_busy_img").hide();
+                                            jQ("#changeni_donation_form input[name='donation_amount']").val('');
+                                            jQ("#changeni_donation_form input[type='submit']").show();
                                             return false;
                                     }
                             });
                             jQ("#changeni_donation_form input[type='submit']").hide();
-                           // jQ("#redirmap-container input[name=cancel]").hide();
                             jQ("#ajax_busy_img").show();
                     }
 		};

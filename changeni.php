@@ -29,7 +29,19 @@ Author URI: http://www.dennisonwolfe.com/
 //  Database Objects
 /*==========================================================================*/
 //define('PENDING_HEADERS_TABLE','changeni_pending_headers');
+//if(empty($changeni_cart)){
+//    $changeni_cart = array();
+//}
 
+
+if(!isset($_SESSION)) {
+    session_start();
+}
+
+
+if(!isset($_SESSION['changeni_cart'])) {
+    $_SESSION['changeni_cart'] = array();
+}
 
 
 if ( is_admin() ) {
@@ -41,7 +53,10 @@ if ( is_admin() ) {
 	add_action('admin_print_styles', 'changeni_load_stylesheets' );
 	//load js
 	add_action('admin_print_scripts', 'changeni_load_scripts' );
-	
+	//ajax handling for logged-in users
+	add_action('wp_ajax_changeni_action', 'changeni_ajax_callback');
+        //ajax handling for for the rest
+	add_action('wp_ajax_nopriv_changeni_action', 'changeni_ajax_callback');
 }
 else{
 	//load css
@@ -49,13 +64,20 @@ else{
 
         //load js
 	add_action('wp_print_scripts', 'changeni_load_scripts' );
+
+        //shopping cart bar
+        add_action( 'wp_footer', 'display_changeni_cart' );
 	
 }
 
 /* Load js files*/
 function changeni_load_scripts() {
-    wp_enqueue_script('changeni', WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/changeni.js', array('jquery-ui-tabs'), '1.0');
-	
+    global $current_blog;
+
+    wp_enqueue_script('changeni', WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/changeni.js', array('jquery-ui-tabs', 'json2'), '1.0');
+
+    $ajax_url = $current_blog->path . 'wp-admin/admin-ajax.php';
+    wp_localize_script( 'changeni', 'changeniJsData', array( 'ajaxUrl' => $ajax_url ) );
 }
 
 /* Load css files*/
@@ -122,17 +144,20 @@ class Changeni_Widget extends WP_Widget {
 	}
 
 	function show_donation_widget($id){
-		
+
+            $changeni_nonce = wp_create_nonce( 'changeni-donation-add' );
+
             $output = '';
-            
-            //$output .= "<ul class='changeni_donation_box' id='changeni_donation_box-$id'>" . PHP_EOL;
-            //$output .= '    <li class="related_link related_link_' . $link->link_id . ' ' . $current . '"><a href="' . $link->link_url . '">' . $link->link_name . '</a></li>' . PHP_EOL;
+
 
             $output .= "<div class='changeni_donation_box' id='changeni_donation_box-$id'>" . PHP_EOL;
             $output .= "    <h2>Donate to this organization</h2>" . PHP_EOL;
             $output .= "    <div class='changeni_donation_box_content' id='changeni_donation_box_content'>" . PHP_EOL;
             $output .= "        <span class='changeni_donation_form' id='changeni_donation_form'>" . PHP_EOL;
             $output .= '            <form method="post" action="">' . PHP_EOL;
+            $output .= '                <input name="cmd" id="changeni_cmd" type="hidden" value="add_donation"  />';
+            $output .= '                <input name="action" id="changeni_action" type="hidden" value="changeni_action"  />';
+            $output .= '                <input name="_ajax_nonce" id="changeni_ajax_nonce" type="hidden" value="' . $changeni_nonce . '"  />';
             $output .= '                <label for="donation_amount">US$</label><input name="donation_amount" id="donation_amount" type="text" value=""  />';
             $output .= '                <input type="submit" class="button" value="Give" />' . PHP_EOL;
             $output .= '                <img src="' . WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/ajax_busy.gif' . '" id="ajax_busy_img"  alt="changeni submitting"/>' . PHP_EOL;
@@ -145,7 +170,7 @@ class Changeni_Widget extends WP_Widget {
             $output .= "        <span class='action_links' id='action_links'>" . PHP_EOL;
             $output .= '            veiw cart &nbsp; | &nbsp; checkout' . PHP_EOL;
             $output .= '        </span>' . PHP_EOL;
-            $output .= '        <div id="info_message"></div>' . PHP_EOL;
+            //$output .= '        <div id="info_message"></div>' . PHP_EOL;
             $output .= '    </div>' . PHP_EOL;
             $output .= '</div>' . PHP_EOL;
 
@@ -155,6 +180,133 @@ class Changeni_Widget extends WP_Widget {
 }
 
 add_action('widgets_init', create_function('', 'return register_widget("Changeni_Widget");'));
+
+//ajax handling
+function changeni_ajax_callback(){
+	//global $changeni_cart;
+        
+	if ( empty($_POST['cmd']) )
+		die(-1);
+
+	//$what = "('post','page')";
+	$command = strtolower($_POST['cmd']);
+	switch($command){
+            case 'add_donation':
+                $nonce = $_POST['_ajax_nonce'];
+                if(wp_verify_nonce( $nonce, 'changeni-donation-add' )){
+                    $amount = $_POST['donation_amount'];
+                    $frequency = $_POST['donation_freq_radio'];
+                    $result = changeni_add_donation($amount, $frequency);
+
+                } else{
+                    $result = 'Smart ass!';
+                }
+                break;
+            default:
+                $result = 'unrecognized command';
+                break;
+        }
+
+        if(!is_array($result)){
+            $result = array('message' => $result);
+        }
+        
+        $result['success'] = true;
+        $result['nonce'] = wp_create_nonce( 'changeni-donation-add' );
+        $json_result = json_encode( $result);
+
+
+        header( "Content-Type: application/json" );
+        echo $json_result;
+        die;
+
+}
+
+
+function changeni_add_donation($amount, $frequency){
+    global $current_blog;
+    //global $changeni_cart;
+
+    if(empty($amount)){
+        return 'no amount specified';
+    }
+
+    if (!preg_match('/^[0-9]+(?:\.[0-9]{1,2})?$/im', $amount) || $amount <= 0){
+        return 'invalid amount';
+    }
+
+    if(empty($frequency)){
+        return 'frequency not specified';
+    }
+
+    $frequency = strtolower($frequency);
+    switch($frequency){
+        case 'monthly':
+            break;
+        case 'one-time':
+            break;
+        default:
+            return 'invalid frequency';
+    }
+
+    $blog_id = $current_blog->blog_id;
+    $_SESSION['changeni_cart'][$blog_id]['amount'] = $amount;
+    $_SESSION['changeni_cart'][$blog_id]['frequency'] = $frequency;
+    $cart_total = get_changeni_cart_total($_SESSION['changeni_cart']);
+
+    $result = array( 'message' => "Current donation is $$amount $frequency",
+            'totalItems' => $cart_total->item_count ,
+            'totalAmount' => $cart_total->amount_total);
+
+    return $result;
+
+}
+
+
+function display_changeni_cart(){
+    global $current_site;
+    
+    //$changeni_cart = $_SESSION['changeni_cart'];
+
+    $cart_total = get_changeni_cart_total($_SESSION['changeni_cart']);
+    
+    ?>
+        <div id="changeni_cart">
+            <a href="/" class="main_site_link">
+                <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/hat.png'; ?>" id="changeni_logo"  alt="changeni logo"/>
+                <h2><?php echo $current_site->site_name ; ?></h2>
+            </a>
+            <div class="changeni_cart_info" >Total amount: <span id="changeni_amount_total"><?php echo $cart_total->amount_total ; ?></span></div>
+            <div class="changeni_cart_info" > Total items: <span id="changeni_item_count"><?php echo $cart_total->item_count ; ?></span></div>
+            <div class="changeni_cart_info" id="info_message"></div>
+        </div>
+    <?php
+
+}
+
+
+function get_changeni_cart_total($changeni_cart = array()){
+    $cart_total = new Changeni_Cart();
+
+    $cart_total->total_items($changeni_cart);
+    return $cart_total;
+}
+
+
+//data definition
+class Changeni_Cart {
+    public $item_count = 0;
+    public $amount_total = 0;
+
+    public function total_items($cart_items = array()){
+        if(!empty($cart_items)){
+            foreach($cart_items as $donation){
+                $this->item_count++;
+                $this->amount_total += $donation['amount'];
+            }
+        }
+    }
+}
 
 
 
