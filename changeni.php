@@ -70,6 +70,17 @@ else{
 	
 }
 
+//Create rewrite rules
+add_filter('rewrite_rules_array', 'add_changeni_rewrite_rules');
+
+//insert query parameter
+add_filter('query_vars','add_changeni_query_var');
+
+//intercept page title
+add_filter ( 'the_posts', 'changeni_page' );
+
+
+
 /* Load js files*/
 function changeni_load_scripts() {
     global $current_blog;
@@ -84,6 +95,250 @@ function changeni_load_scripts() {
 function changeni_load_stylesheets() {
 	$style_file = plugins_url('changeni/changeni.css');
 	echo '<link rel="stylesheet" type="text/css" href="' . $style_file . '" />' . PHP_EOL;
+
+}
+
+
+/* modify page title and content*/
+function changeni_page($posts) {
+    global $wp_query;
+   // global $post;
+    
+    if (isset ( $wp_query->query_vars['show_page'] )){
+        
+       // if($post->post_title == $title){
+            $request = $wp_query->query_vars['show_page'];
+            $request = trim(strtolower($request));
+            $page_name = 'changeni-' . $request;
+            //$page_title = '';
+            switch($request){
+                case 'cart':
+                    $posts[0] = changeni_cart_page($posts[0]);
+                    break;
+                case 'checkout':
+                    $page_title = 'Check-out';
+                //default:
+                //    $page_title = $title;
+                    break;
+            }
+
+           // return $page_title;
+        //}
+    }
+
+    return $posts;
+}
+
+
+function changeni_cart_page($cart_page){
+    //$cart_page = new stdClass();
+
+    $cart_page->ID = -1;
+    $cart_page->post_title = 'Donations Cart';
+    $cart_page->post_content = changeni_cart_page_content();
+    $cart_page->post_date = current_time('mysql');
+    $cart_page->post_date_gmt = current_time('mysql', 1);
+    $cart_page->post_category = 0;
+    $cart_page->post_excerpt = '';
+    $cart_page->comment_status = 'closed';
+    $cart_page->ping_status = 'closed';
+    $cart_page->post_password = '';
+    $cart_page->post_name = $page_name;
+    $cart_page->to_ping = '';
+    $cart_page->pinged = '';
+    $cart_page->post_modified = current_time('mysql');
+    $cart_page->post_modified_gmt = current_time('mysql', 1);
+    $cart_page->post_content_filtered = '';
+    $cart_page->post_parent = 0;
+    $cart_page->guid = get_bloginfo('wpurl') . '/' . $page_name;
+    $cart_page->menu_order = 0;
+    $cart_page->post_type = 'post';
+    $cart_page->post_mime_type = '';
+    $cart_page->comment_count = 0;
+
+    return $cart_page;
+}
+
+function changeni_cart_page_content(){
+    $cart_items = $_SESSION['changeni_cart'];
+    ob_start();
+    
+    ?>
+        <div id="donations_cart">
+            <table class="widefat">
+                <thead>
+                        <tr>
+                        <th class="cart_count" id="cart_count" scope="col">
+                                Item
+                        </th>
+                        <?php
+                        $columns = array('Item_count', 'Organization', 'Amount', 'Recurrence');
+                        ob_start();
+                        foreach($columns as $column_name) {
+                            if(strtolower($column_name) == 'item_count'){
+                                continue;
+                            }
+                        ?>
+                            <th scope="col"><?php echo $column_name; ?></th>
+                        <?php
+                        }
+                        $column_names = ob_get_contents();
+                        ob_end_clean();
+
+                        echo $column_names;
+                        ?>
+                        </tr>
+                </thead>
+                <tfoot>
+                        <tr>
+                        <th class="cart_count" id="cart_count_footer" scope="col">
+                                Item
+                        </th>
+                                <?php echo $column_names; ?>
+                        </tr>
+                </tfoot>
+                <tbody id="changeni-donation-list" class="list:site">
+                    <?php
+                    if ( $cart_items ) {
+                        $class = '';
+                        $item_count = 0;
+                        foreach ( $cart_items as $blog_id => $donation ) {
+                            $item_count++;
+                            $class = ( 'alternate' == $class ) ? '' : 'alternate';
+                            echo "<tr class='$class'>";
+                            foreach ( $columns as $column_name ) {
+                                switch ( strtolower($column_name) ) {
+                                    case 'item_count':
+                                        ?>
+                                                <td valign="top" scope="row" class="item-count-column">
+                                                       <?php echo $item_count; ?>
+                                                </td>
+                                        <?php
+                                        break;
+                                    case 'amount':
+                                        ?>
+                                                <td valign="top" scope="row" class="amount-column">
+                                                       <?php echo $donation['amount']; ?>
+                                                </td>
+                                        <?php
+                                        break;
+                                    case 'recurrence':
+                                        ?>
+                                                <td valign="top" scope="row" class="recurrence-column">
+                                                       <?php echo $donation['frequency']; ?>
+                                                </td>
+                                        <?php
+                                        break;
+                                    default:
+                                        ?>
+                                                <td valign="top">
+                                                        <?php echo get_blog_option( $blog_id, 'blogname' ); ?>
+                                                     
+                                                </td>
+                                        <?php
+                                        break;
+                                }
+                            }
+                        }
+                    }
+                    else {
+                    ?>
+                        <tr>
+                                <td colspan="<?php echo (int) count( $columns ); ?>"><?php _e( 'No donations yet.' ) ?></td>
+                        </tr>
+                    <?php
+                    } // end if ($header_list)
+                    ?>
+
+                </tbody>
+            </table>
+        </div>
+    
+    <?php
+    $output = ob_get_contents();
+    ob_end_clean();
+
+    return $output;
+}
+
+/* insert changeni query var*/
+function add_changeni_query_var($query_vars) {
+    array_push($query_vars, 'show_page');
+    return $query_vars;
+}
+
+/* create changeni rewrite rules*/
+function add_changeni_rewrite_rules($wp_rewrite_rules) {
+	global $wp_rewrite;
+
+	$rule_key = '%changeni%';
+	$url_pattern = '([^/]+)';
+	$query_string = 'show_page=';
+
+	$wp_rewrite->add_rewrite_tag($rule_key, $url_pattern, $query_string);
+
+	$url_structure = $wp_rewrite->root . "changeni/$rule_key/";
+	$rewrite_rules = $wp_rewrite->generate_rewrite_rules($url_structure);
+
+	$wp_rewrite_rules = $rewrite_rules + $wp_rewrite_rules;
+	return $wp_rewrite_rules;
+}
+
+/* update the database*/
+function changeni_update_database() {
+
+    global  $wpdb;
+    $table_name = $wpdb->prefix . PENDING_HEADERS_TABLE;
+
+    //add the table if its not present (upgrade or reactivation)
+    if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        $sql = "CREATE TABLE ".$table_name." (
+                header_id bigint(20) NOT NULL AUTO_INCREMENT,
+                blog_id bigint(20) unsigned NOT NULL,
+                header_name varchar(200) NOT NULL default '',
+                required_action varchar(20) NOT NULL,
+                last_error longtext NOT NULL,
+                PRIMARY KEY  (header_id)
+                ) $charset_collate;";
+        $result = dbDelta($sql);
+     }
+
+    //populate the table with current hostnames
+    $query = "SELECT blog_id, domain FROM {$wpdb->blogs} WHERE site_id = '{$wpdb->siteid}' ";
+    $query .= " ORDER BY {$wpdb->blogs}.blog_id ";
+    $blog_list = $wpdb->get_results( $query, ARRAY_A );
+
+    if ( $blog_list ) {
+            foreach ( $blog_list as $blog ) {
+
+                $rows_affected = $wpdb->insert( $table_name,
+                                                array( 'blog_id' => $blog['blog_id'],
+                                                        'header_name' => $blog['domain'],
+                                                        'required_action' => 'add',
+                                                        'last_error' => '' ) );
+            }
+	}
+}
+
+/* initialize the plugin settings*/
+function changeni_init() {
+    //trigger refresh of rewrite rules
+    global $wp_rewrite;
+
+    $wp_rewrite->flush_rules();
+
+ return;
+    if(!get_site_option('changeni_website_name')){
+	add_site_option('changeni_website_name', '[IIS Website name]');
+	add_site_option('changeni_server_ip', '[IIS Website IP address]');
+
+    }
+
+    changeni_update_database();
+    add_site_option('changeni_db_version', '1.0.0');
+
 
 }
 
@@ -144,7 +399,9 @@ class Changeni_Widget extends WP_Widget {
 	}
 
 	function show_donation_widget($id){
+            global $current_site;
 
+            $cart_url = $current_site->path . 'changeni/cart/';
             $changeni_nonce = wp_create_nonce( 'changeni-donation-add' );
 
             $output = '';
@@ -168,7 +425,7 @@ class Changeni_Widget extends WP_Widget {
             $output .= '            </form>' . PHP_EOL;
             $output .= '        </span>' . PHP_EOL;
             $output .= "        <span class='action_links' id='action_links'>" . PHP_EOL;
-            $output .= '            veiw cart &nbsp; | &nbsp; checkout' . PHP_EOL;
+            $output .= '            <a href="' . $cart_url . '">veiw cart</a> &nbsp; | &nbsp; checkout' . PHP_EOL;
             $output .= '        </span>' . PHP_EOL;
             //$output .= '        <div id="info_message"></div>' . PHP_EOL;
             $output .= '    </div>' . PHP_EOL;
@@ -312,56 +569,6 @@ class Changeni_Cart {
 
 // =======================================   Foreign code beyond this point!!  =============================================
 
-
-function changeni_update_database() {
-
-    global  $wpdb;
-    $table_name = $wpdb->prefix . PENDING_HEADERS_TABLE;
-
-    //add the table if its not present (upgrade or reactivation)
-    if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
-
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        $sql = "CREATE TABLE ".$table_name." (
-                header_id bigint(20) NOT NULL AUTO_INCREMENT,
-                blog_id bigint(20) unsigned NOT NULL,
-                header_name varchar(200) NOT NULL default '',
-                required_action varchar(20) NOT NULL,
-                last_error longtext NOT NULL,
-                PRIMARY KEY  (header_id)
-                ) $charset_collate;";
-        $result = dbDelta($sql);
-     }
-
-    //populate the table with current hostnames
-    $query = "SELECT blog_id, domain FROM {$wpdb->blogs} WHERE site_id = '{$wpdb->siteid}' ";
-    $query .= " ORDER BY {$wpdb->blogs}.blog_id ";
-    $blog_list = $wpdb->get_results( $query, ARRAY_A );
-
-    if ( $blog_list ) {
-            foreach ( $blog_list as $blog ) {
-
-                $rows_affected = $wpdb->insert( $table_name,
-                                                array( 'blog_id' => $blog['blog_id'],
-                                                        'header_name' => $blog['domain'],
-                                                        'required_action' => 'add',
-                                                        'last_error' => '' ) );
-            }
-	}
-}
-
-/* initialize the plugin settings*/
-function changeni_init() {
-return;
-    if(!get_site_option('changeni_website_name')){
-	add_site_option('changeni_website_name', '[IIS Website name]');
-	add_site_option('changeni_server_ip', '[IIS Website IP address]');
-
-    }
-
-    changeni_update_database();
-    add_site_option('changeni_db_version', '1.0.0');
-}
 
 /* register settings*/
 function register_changeni_settings() {

@@ -303,6 +303,36 @@ div.changeni_cart_info {
 /* @end */
 
 
+/*@ Shopping cart */
+
+div#donations_cart {
+    background: #ECEDF6;
+    border: 1px solid #CCC;
+    -webkit-box-shadow: 3px 3px 3px #888;
+    -moz-box-shadow: 3px 3px 3px #888;
+    box-shadow: 3px 3px 3px #888;
+    -webkit-border-radius: 5px;
+    -moz-border-radius: 5px;
+    border-radius: 5px;
+    padding: 5px 5px 5px 15px;
+    width: 560px;
+}
+
+div#donations_cart .widefat * {
+    word-wrap: break-word;
+}
+
+div#donations_cart .widefat tr {
+    padding: 0;
+}
+
+div#donations_cart .alternate, div#donations_cart .alt {
+    background-color: #f9f9f9;
+}
+
+/* @end */
+
+
 
 
 
