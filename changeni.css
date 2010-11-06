@@ -305,7 +305,7 @@ div.changeni_cart_info {
 
 /*@ Shopping cart */
 
-div#donations_cart {
+div.donations_ui {
     background: #ECEDF6;
     border: 1px solid #CCC;
     -webkit-box-shadow: 3px 3px 3px #888;
@@ -318,15 +318,15 @@ div#donations_cart {
     width: 560px;
 }
 
-div#donations_cart .widefat * {
+div.donations_ui .widefat * {
     word-wrap: break-word;
 }
 
-div#donations_cart .widefat tr {
+div.donations_ui .widefat tr {
     padding: 0;
 }
 
-div#donations_cart .alternate, div#donations_cart .alt {
+div.donations_ui .alternate, div.donations_ui .alt {
     background-color: #f9f9f9;
 }
 

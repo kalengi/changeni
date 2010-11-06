@@ -28,10 +28,8 @@ Author URI: http://www.dennisonwolfe.com/
 /*==========================================================================*/
 //  Database Objects
 /*==========================================================================*/
-//define('PENDING_HEADERS_TABLE','changeni_pending_headers');
-//if(empty($changeni_cart)){
-//    $changeni_cart = array();
-//}
+define('CHANGENI_PAYMENTS_TABLE','changeni_payments');
+
 
 
 if(!isset($_SESSION)) {
@@ -66,7 +64,7 @@ else{
 	add_action('wp_print_scripts', 'changeni_load_scripts' );
 
         //shopping cart bar
-        add_action( 'wp_footer', 'display_changeni_cart' );
+        add_action( 'wp_footer', 'display_changeni_cart_summary' );
 	
 }
 
@@ -99,72 +97,67 @@ function changeni_load_stylesheets() {
 }
 
 
-/* modify page title and content*/
+/* generate changeni page */
 function changeni_page($posts) {
     global $wp_query;
    // global $post;
     
     if (isset ( $wp_query->query_vars['show_page'] )){
         
-       // if($post->post_title == $title){
-            $request = $wp_query->query_vars['show_page'];
-            $request = trim(strtolower($request));
-            $page_name = 'changeni-' . $request;
-            //$page_title = '';
-            switch($request){
-                case 'cart':
-                    $posts[0] = changeni_cart_page($posts[0]);
-                    break;
-                case 'checkout':
-                    $page_title = 'Check-out';
-                //default:
-                //    $page_title = $title;
-                    break;
-            }
+        $request = $wp_query->query_vars['show_page'];
+        $request = trim(strtolower($request));
+        $page_name = 'changeni-' . $request;
+        //$page_title = '';
+        switch($request){
+            case 'cart':
+                $posts[0] = changeni_cart_page($posts[0], $page_name);
+                break;
+            case 'checkout':
+                $posts[0] = changeni_checkout_page($posts[0], $page_name);
+                break;
+            case 'paid':
+                $posts[0] = changeni_record_payment($posts[0], $page_name);
+                break;
+            case 'thanks':
+                $posts[0] = changeni_thanks_page($posts[0], $page_name);
+                break;
+        }
 
-           // return $page_title;
-        //}
     }
 
     return $posts;
 }
 
+function changeni_init_page($page, $page_name, $page_title){
+    $page->ID = -1;
+    $page->post_title = $page_title;
+    $page->post_date = current_time('mysql');
+    $page->post_date_gmt = current_time('mysql', 1);
+    $page->post_category = 0;
+    $page->post_excerpt = '';
+    $page->comment_status = 'closed';
+    $page->ping_status = 'closed';
+    $page->post_password = '';
+    $page->post_name = $page_name;
+    $page->to_ping = '';
+    $page->pinged = '';
+    $page->post_modified = current_time('mysql');
+    $page->post_modified_gmt = current_time('mysql', 1);
+    $page->post_content_filtered = '';
+    $page->post_parent = 0;
+    $page->guid = get_bloginfo('wpurl') . '/' . $page_name;
+    $page->menu_order = 0;
+    $page->post_type = 'post';
+    $page->post_mime_type = '';
+    $page->comment_count = 0;
 
-function changeni_cart_page($cart_page){
-    //$cart_page = new stdClass();
-
-    $cart_page->ID = -1;
-    $cart_page->post_title = 'Donations Cart';
-    $cart_page->post_content = changeni_cart_page_content();
-    $cart_page->post_date = current_time('mysql');
-    $cart_page->post_date_gmt = current_time('mysql', 1);
-    $cart_page->post_category = 0;
-    $cart_page->post_excerpt = '';
-    $cart_page->comment_status = 'closed';
-    $cart_page->ping_status = 'closed';
-    $cart_page->post_password = '';
-    $cart_page->post_name = $page_name;
-    $cart_page->to_ping = '';
-    $cart_page->pinged = '';
-    $cart_page->post_modified = current_time('mysql');
-    $cart_page->post_modified_gmt = current_time('mysql', 1);
-    $cart_page->post_content_filtered = '';
-    $cart_page->post_parent = 0;
-    $cart_page->guid = get_bloginfo('wpurl') . '/' . $page_name;
-    $cart_page->menu_order = 0;
-    $cart_page->post_type = 'post';
-    $cart_page->post_mime_type = '';
-    $cart_page->comment_count = 0;
-
-    return $cart_page;
+    return $page;
 }
 
-function changeni_cart_page_content(){
+function get_changeni_cart_listing(){
     $cart_items = $_SESSION['changeni_cart'];
     ob_start();
-    
-    ?>
-        <div id="donations_cart">
+        ?>
             <table class="widefat">
                 <thead>
                         <tr>
@@ -174,15 +167,15 @@ function changeni_cart_page_content(){
                         <?php
                         $columns = array('Item_count', 'Organization', 'Amount', 'Recurrence');
                         ob_start();
-                        foreach($columns as $column_name) {
-                            if(strtolower($column_name) == 'item_count'){
-                                continue;
+                            foreach($columns as $column_name) {
+                                if(strtolower($column_name) == 'item_count'){
+                                    continue;
+                                }
+                            ?>
+                                <th scope="col"><?php echo $column_name; ?></th>
+                            <?php
                             }
-                        ?>
-                            <th scope="col"><?php echo $column_name; ?></th>
-                        <?php
-                        }
-                        $column_names = ob_get_contents();
+                            $column_names = ob_get_contents();
                         ob_end_clean();
 
                         echo $column_names;
@@ -232,8 +225,8 @@ function changeni_cart_page_content(){
                                     default:
                                         ?>
                                                 <td valign="top">
-                                                        <?php echo get_blog_option( $blog_id, 'blogname' ); ?>
-                                                     
+                                                        <a href="<?php echo get_blog_option( $blog_id, 'siteurl' ) ; ?>"><?php echo $donation['name']; ?></a>
+
                                                 </td>
                                         <?php
                                         break;
@@ -247,18 +240,220 @@ function changeni_cart_page_content(){
                                 <td colspan="<?php echo (int) count( $columns ); ?>"><?php _e( 'No donations yet.' ) ?></td>
                         </tr>
                     <?php
-                    } // end if ($header_list)
+                    } // end if ($cart_items)
                     ?>
 
                 </tbody>
             </table>
-        </div>
-    
-    <?php
-    $output = ob_get_contents();
+        <?php
+        $cart_listing = ob_get_contents();
     ob_end_clean();
 
-    return $output;
+    return $cart_listing;
+}
+
+function changeni_cart_page($cart_page, $page_name){
+    $cart_page = changeni_init_page($cart_page, $page_name, 'Donations Cart');
+    
+    $cart_items = $_SESSION['changeni_cart'];
+    ob_start();
+        ?>
+            <div id="donations_cart" class="donations_ui">
+                <?php echo get_changeni_cart_listing(); ?>
+                <?php
+                    if ( $cart_items ) {
+                    ?>
+                        <form method="post" action="/changeni/checkout/">
+                            <p class="submit">
+                                <input type="submit" class="button-primary" value="Checkout"/>
+                            </p>
+                        </form>
+                    <?php
+                    }
+                ?>
+            </div>
+
+        <?php
+        $page_content = ob_get_contents();
+    ob_end_clean();
+    
+    
+    
+    $cart_page->post_content = $page_content;
+    
+    return $cart_page;
+}
+
+
+function changeni_verify_IPN($payment_info){
+    $paypal_url = 'https://www.sandbox.paypal.com/cgi-bin/webscr';
+    //$payment_info = array();
+    $payment_info['cmd'] = '_notify-validate';
+    //$payment_info += $_POST;
+    $paypal_options = array(
+            'timeout' => 5,
+            'body' => $payment_info,
+            'user-agent' => ('Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.2.8) Gecko/20100722 Firefox/3.6.8 (.NET CLR 3.5.30729)')
+    );
+
+    $verification = wp_remote_post($paypal_url, $paypal_options);
+    if(strpos($verification['body'], 'VERIFIED') > 0 ) {
+           // header( "Content-Type: text/plain" );
+           // echo 'IPN verified';
+           // exit;
+           return $payment_info;
+    } else {
+            $log_file = $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log';
+            $fh = fopen($log_file, 'a') or die("can't open debug file");
+            $stringData = '<div>Paypal IPN verification: ' . print_r('IPN verification failure', 1) . '</div><br><br>' . "\r\n";
+            fwrite($fh, $stringData);
+            fclose($fh);
+
+            exit("IPN verification failure");
+    }
+}
+
+function changeni_record_payment($thanks_page, $page_name){
+        $log_file = $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log';
+	$fh = fopen($log_file, 'a') or die("can't open debug file");
+	$stringData = '<div>Paypal IPN: ' . print_r($_POST, 1) . '</div><br><br>' . "\r\n";
+	fwrite($fh, $stringData);
+	fclose($fh);
+
+        $payment_info = $_POST;
+        
+        //ensure Paypal IPN is legit
+        //ENABLE!!!!  ---->     $payment_info = changeni_verify_IPN($payment_info);
+
+        if(!isset($payment_info['payer_id'])){
+            exit("Invalid transaction notification");
+        }
+        //save transaction
+        global  $wpdb;
+        
+        $table_name = $wpdb->prefix . CHANGENI_PAYMENTS_TABLE;
+        
+        $item_count = $payment_info['num_cart_items'];
+        $first_name = $payment_info['first_name'];
+        $last_name = $payment_info['last_name'];
+        $payer_email = $payment_info['payer_email'];
+
+        $tz = get_option('timezone_string');
+        date_default_timezone_set( $tz );
+		
+        $payment_date = strtotime($payment_info['payment_date']);
+        $payment_date = date('Y-m-d H:i:s', $payment_date);
+        $payment_date_gmt = get_gmt_from_date($payment_info['payment_date']);
+        $payment_type = ($payment_info['payment_type'] == 'cart') ? 'manual' : 'auto';
+        
+        for($i=1; $i<=$item_count; $i++){
+            $item_code = $payment_info["item_number$i"];
+            $item_code = explode('-', $item_code);
+            $blog_id = $item_code[0];
+            $amount = $payment_info["mc_gross_$i"];
+
+            $rows_affected = $wpdb->insert( $table_name,
+                                                array( 'first_name' => $first_name,
+                                                    'last_name' => $last_name,
+                                                    'email' => $payer_email,
+                                                    'payment_date' => $payment_date,
+                                                    'payment_date_gmt' => $payment_date_gmt,
+                                                    'payment_type' => $payment_type,
+                                                    'blog_id' => $blog_id,
+                                                    'amount' => $amount ) );
+        }
+
+        header( "Content-Type: text/plain" );
+        echo 'Transaction captured';
+        exit;
+        
+
+}
+
+function changeni_thanks_page($thanks_page, $page_name){
+    unset ($_SESSION['changeni_cart']);
+    $thanks_page = changeni_init_page($thanks_page, $page_name, 'Thank you');
+
+    ob_start();
+        ?>
+            <div id="donations_thanks" class="donations_ui">
+                Thanks for the donation!
+            </div>
+
+    <?php
+        $page_content = ob_get_contents();
+    ob_end_clean();
+
+    
+    $thanks_page->post_content = $page_content;
+
+    return $thanks_page;
+}
+
+function changeni_checkout_page($checkout_page, $page_name){
+    $checkout_page = changeni_init_page($checkout_page, $page_name, 'Check-out');
+
+    $cart_items = $_SESSION['changeni_cart'];
+    ob_start();
+        ?>
+            <div id="donations_checkout" class="donations_ui">
+                <?php echo get_changeni_cart_listing(); ?>
+                
+                <?php
+                    if ( $cart_items ) {
+                        $cart_total = get_changeni_cart_total($cart_items);
+                    ?>
+                        <form method="post" action="/changeni/donate/">
+                            <label for="donation_amount">US$</label><input name="donation_amount" id="donation_amount" type="text" value="<?php echo $cart_total->amount_total; ?>"  />
+
+                            <p class="submit">
+                                <input type="submit" class="button-primary" value="Donate"/>
+                            </p>
+                        </form>
+                
+                
+                        <form action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post">
+                                <input type="hidden" name="cmd" value="_cart">
+                                <input type="hidden" name="upload" value="1">
+                                <input type="hidden" name="business" value="ojaigv_1284491427_biz@yahoo.com">
+                                <input type="hidden" name="currency_code" value="USD">
+                                <input type="hidden" name="no_shipping" value="1" />
+                                <input type="hidden" name="tax" value="0" />
+                                <input type="hidden" name="no_note" value="1" />
+                                <input type="hidden" name="return" value="http://41.212.24.45/changeni/thanks/">
+                                <input type="hidden" name="cancel_return" value="http://41.212.24.45/">
+                                <input type="hidden" name="notify_url" value="http://41.212.24.45/changeni/paid/?XDEBUG_SESSION_START=netbeans-xdebug">
+                                <input type="submit" class="button-primary" value="Donate"/>
+
+                                <?php 
+                                    $item_count = 0;
+                                    foreach ( $cart_items as $blog_id => $donation ) {
+                                        $item_count++;
+                                ?>
+                                        <input type="hidden" name="item_name_<?php echo $item_count; ?>" value="<?php echo $donation['name']; ?>">
+                                        <input type="hidden" name="item_number_<?php echo $item_count; ?>" value="<?php echo $blog_id . '-' . $donation['short_name']; ?>">
+                                        <input type="hidden" name="quantity_<?php echo $item_count; ?>" value="1">
+                                        <input type="hidden" name="amount_<?php echo $item_count; ?>" value="<?php echo $donation['amount']; ?>">
+                                        
+                                <?php
+                                  }
+                                ?>
+                        </form>
+
+                    <?php
+                    }
+                ?>
+            </div>
+
+        <?php
+        $page_content = ob_get_contents();
+    ob_end_clean();
+
+
+
+    $checkout_page->post_content = $page_content;
+
+    return $checkout_page;
 }
 
 /* insert changeni query var*/
@@ -288,51 +483,49 @@ function add_changeni_rewrite_rules($wp_rewrite_rules) {
 function changeni_update_database() {
 
     global  $wpdb;
-    $table_name = $wpdb->prefix . PENDING_HEADERS_TABLE;
+    $table_name = $wpdb->prefix . CHANGENI_PAYMENTS_TABLE;
 
     //add the table if its not present (upgrade or reactivation)
     if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         $sql = "CREATE TABLE ".$table_name." (
-                header_id bigint(20) NOT NULL AUTO_INCREMENT,
+                payment_id bigint(20) NOT NULL AUTO_INCREMENT,
                 blog_id bigint(20) unsigned NOT NULL,
-                header_name varchar(200) NOT NULL default '',
-                required_action varchar(20) NOT NULL,
-                last_error longtext NOT NULL,
-                PRIMARY KEY  (header_id)
+                payment_date datetime NOT NULL,
+                payment_date_gmt datetime NOT NULL,
+                first_name varchar(200) NOT NULL default '',
+                last_name varchar(200) NOT NULL,
+                email varchar(200) NOT NULL,
+                payment_type varchar(20) NOT NULL,
+                amount decimal(11,2) NOT NULL DEFAULT '0',
+                PRIMARY KEY  (payment_id)
                 ) $charset_collate;";
         $result = dbDelta($sql);
      }
 
-    //populate the table with current hostnames
-    $query = "SELECT blog_id, domain FROM {$wpdb->blogs} WHERE site_id = '{$wpdb->siteid}' ";
-    $query .= " ORDER BY {$wpdb->blogs}.blog_id ";
-    $blog_list = $wpdb->get_results( $query, ARRAY_A );
-
-    if ( $blog_list ) {
-            foreach ( $blog_list as $blog ) {
-
-                $rows_affected = $wpdb->insert( $table_name,
-                                                array( 'blog_id' => $blog['blog_id'],
-                                                        'header_name' => $blog['domain'],
-                                                        'required_action' => 'add',
-                                                        'last_error' => '' ) );
-            }
-	}
+    
 }
 
 /* initialize the plugin settings*/
 function changeni_init() {
+
+    //run the configuration only if at the root site
+    global $current_blog;
+
+    if($current_blog->path !== '/'){
+        return;
+    }
+
     //trigger refresh of rewrite rules
     global $wp_rewrite;
 
     $wp_rewrite->flush_rules();
 
- return;
-    if(!get_site_option('changeni_website_name')){
-	add_site_option('changeni_website_name', '[IIS Website name]');
-	add_site_option('changeni_server_ip', '[IIS Website IP address]');
+ 
+    if(!get_site_option('changeni_paypal_url')){
+	add_site_option('changeni_paypal_url', 'https://www.sandbox.paypal.com/cgi-bin/webscr');
+	//add_site_option('changeni_server_ip', '[IIS Website IP address]');
 
     }
 
@@ -402,34 +595,36 @@ class Changeni_Widget extends WP_Widget {
             global $current_site;
 
             $cart_url = $current_site->path . 'changeni/cart/';
+            $checkout_url = $current_site->path . 'changeni/checkout/';
             $changeni_nonce = wp_create_nonce( 'changeni-donation-add' );
 
-            $output = '';
-
-
-            $output .= "<div class='changeni_donation_box' id='changeni_donation_box-$id'>" . PHP_EOL;
-            $output .= "    <h2>Donate to this organization</h2>" . PHP_EOL;
-            $output .= "    <div class='changeni_donation_box_content' id='changeni_donation_box_content'>" . PHP_EOL;
-            $output .= "        <span class='changeni_donation_form' id='changeni_donation_form'>" . PHP_EOL;
-            $output .= '            <form method="post" action="">' . PHP_EOL;
-            $output .= '                <input name="cmd" id="changeni_cmd" type="hidden" value="add_donation"  />';
-            $output .= '                <input name="action" id="changeni_action" type="hidden" value="changeni_action"  />';
-            $output .= '                <input name="_ajax_nonce" id="changeni_ajax_nonce" type="hidden" value="' . $changeni_nonce . '"  />';
-            $output .= '                <label for="donation_amount">US$</label><input name="donation_amount" id="donation_amount" type="text" value=""  />';
-            $output .= '                <input type="submit" class="button" value="Give" />' . PHP_EOL;
-            $output .= '                <img src="' . WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/ajax_busy.gif' . '" id="ajax_busy_img"  alt="changeni submitting"/>' . PHP_EOL;
-            $output .= "                <span class='donation_freq' id='donation_freq'>" . PHP_EOL;
-            $output .= '                    <br /><input type="radio" id="donation_freq_radio_monthly" name="donation_freq_radio" class="donation_freq_radio" value="monthly" checked="checked" /><label class="donation_freq_label" for="donation_freq_radio_monthly">monthly</label>' . PHP_EOL;
-            $output .= '                    <input type="radio" id="donation_freq_radio_once" name="donation_freq_radio" class="donation_freq_radio" value="one-time" /><label class="donation_freq_label" for="donation_freq_radio_once">one-time</label>' . PHP_EOL;
-            $output .= '                </span>' . PHP_EOL;
-            $output .= '            </form>' . PHP_EOL;
-            $output .= '        </span>' . PHP_EOL;
-            $output .= "        <span class='action_links' id='action_links'>" . PHP_EOL;
-            $output .= '            <a href="' . $cart_url . '">veiw cart</a> &nbsp; | &nbsp; checkout' . PHP_EOL;
-            $output .= '        </span>' . PHP_EOL;
-            //$output .= '        <div id="info_message"></div>' . PHP_EOL;
-            $output .= '    </div>' . PHP_EOL;
-            $output .= '</div>' . PHP_EOL;
+            ob_start();
+                ?>
+                    <div class='changeni_donation_box' id='changeni_donation_box-<?php echo $id; ?>'>
+                        <h2>Donate to this organization</h2>
+                        <div class='changeni_donation_box_content' id='changeni_donation_box_content'>
+                            <span class='changeni_donation_form' id='changeni_donation_form'>
+                                <form method="post" action="">
+                                    <input name="cmd" id="changeni_cmd" type="hidden" value="add_donation"  />
+                                    <input name="action" id="changeni_action" type="hidden" value="changeni_action"  />
+                                    <input name="_ajax_nonce" id="changeni_ajax_nonce" type="hidden" value="<?php echo $changeni_nonce; ?>"  />
+                                    <label for="donation_amount">US$</label><input name="donation_amount" id="donation_amount" type="text" value=""  />
+                                    <input type="submit" class="button" value="Give" />
+                                    <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/ajax_busy.gif'; ?>" id="ajax_busy_img"  alt="changeni submitting"/>
+                                    <span class='donation_freq' id='donation_freq'>
+                                        <br /><input type="radio" id="donation_freq_radio_monthly" name="donation_freq_radio" class="donation_freq_radio" value="monthly" checked="checked" /><label class="donation_freq_label" for="donation_freq_radio_monthly">monthly</label>
+                                        <input type="radio" id="donation_freq_radio_once" name="donation_freq_radio" class="donation_freq_radio" value="one-time" /><label class="donation_freq_label" for="donation_freq_radio_once">one-time</label>
+                                    </span>
+                                </form>
+                            </span>
+                            <span class='action_links' id='action_links'>
+                                <a href="<?php echo $cart_url; ?>">veiw cart</a> &nbsp; | &nbsp; <a href="<?php echo $checkout_url; ?>">checkout</a>
+                            </span>
+                        </div>
+                    </div>
+                <?php
+                    $output = ob_get_contents();
+            ob_end_clean();
 
             return $output;
 	}
@@ -509,6 +704,8 @@ function changeni_add_donation($amount, $frequency){
     $blog_id = $current_blog->blog_id;
     $_SESSION['changeni_cart'][$blog_id]['amount'] = $amount;
     $_SESSION['changeni_cart'][$blog_id]['frequency'] = $frequency;
+    $_SESSION['changeni_cart'][$blog_id]['short_name'] = str_replace('/', '', $current_blog->path) ;
+    $_SESSION['changeni_cart'][$blog_id]['name'] = get_blog_option( $blog_id, 'blogname' );
     $cart_total = get_changeni_cart_total($_SESSION['changeni_cart']);
 
     $result = array( 'message' => "Current donation is $$amount $frequency",
@@ -520,7 +717,7 @@ function changeni_add_donation($amount, $frequency){
 }
 
 
-function display_changeni_cart(){
+function display_changeni_cart_summary(){
     global $current_site;
     
     //$changeni_cart = $_SESSION['changeni_cart'];
