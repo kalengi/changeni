@@ -24,7 +24,6 @@
 		addToCart : function(f){
                             f=jQ(f);
                             var data=f.serialize();
-                            //var url=js_changeni_site_root + "wp-admin/admin-ajax.php";
                             var url=changeniJsData.ajaxUrl;
                             debugger;
                             jQ.ajax({

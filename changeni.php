@@ -29,7 +29,7 @@ Author URI: http://www.dennisonwolfe.com/
 //  Database Objects
 /*==========================================================================*/
 define('CHANGENI_PAYMENTS_TABLE','changeni_payments');
-
+define('CHANGENI_FOLDER', WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) );
 
 
 if(!isset($_SESSION)) {
@@ -50,7 +50,7 @@ if ( is_admin() ) {
 	//load css
 	add_action('admin_print_styles', 'changeni_load_stylesheets' );
 	//load js
-	add_action('admin_print_scripts', 'changeni_load_scripts' );
+	add_action('admin_print_scripts', 'changeni_load_admin_scripts' );
 	//ajax handling for logged-in users
 	add_action('wp_ajax_changeni_action', 'changeni_ajax_callback');
         //ajax handling for for the rest
@@ -78,12 +78,18 @@ add_filter('query_vars','add_changeni_query_var');
 add_filter ( 'the_posts', 'changeni_page' );
 
 
+/* Load admin js files*/
+function changeni_load_admin_scripts() {
+    
+    wp_enqueue_script('changeni-admin', CHANGENI_FOLDER . '/changeni-admin.js', array('jquery-ui-tabs', 'json2'), '1.0');
+
+}
 
 /* Load js files*/
 function changeni_load_scripts() {
     global $current_blog;
 
-    wp_enqueue_script('changeni', WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/changeni.js', array('jquery-ui-tabs', 'json2'), '1.0');
+    wp_enqueue_script('changeni', CHANGENI_FOLDER . '/changeni.js', array('jquery-ui-tabs', 'json2'), '1.0');
 
     $ajax_url = $current_blog->path . 'wp-admin/admin-ajax.php';
     wp_localize_script( 'changeni', 'changeniJsData', array( 'ajaxUrl' => $ajax_url ) );
@@ -286,7 +292,7 @@ function changeni_cart_page($cart_page, $page_name){
 
 
 function changeni_verify_IPN($payment_info){
-    $paypal_url = 'https://www.sandbox.paypal.com/cgi-bin/webscr';
+    $paypal_url = get_site_option('changeni_paypal_url');
     //$payment_info = array();
     $payment_info['cmd'] = '_notify-validate';
     //$payment_info += $_POST;
@@ -412,17 +418,17 @@ function changeni_checkout_page($checkout_page, $page_name){
                         </form>
                 
                 
-                        <form action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post">
+                        <form action="<?php echo get_site_option('changeni_paypal_url'); ?>" method="post">
                                 <input type="hidden" name="cmd" value="_cart">
                                 <input type="hidden" name="upload" value="1">
-                                <input type="hidden" name="business" value="ojaigv_1284491427_biz@yahoo.com">
+                                <input type="hidden" name="business" value="<?php echo get_site_option('changeni_paypal_account'); ?>">
                                 <input type="hidden" name="currency_code" value="USD">
                                 <input type="hidden" name="no_shipping" value="1" />
                                 <input type="hidden" name="tax" value="0" />
                                 <input type="hidden" name="no_note" value="1" />
-                                <input type="hidden" name="return" value="http://41.212.24.45/changeni/thanks/">
-                                <input type="hidden" name="cancel_return" value="http://41.212.24.45/">
-                                <input type="hidden" name="notify_url" value="http://41.212.24.45/changeni/paid/?XDEBUG_SESSION_START=netbeans-xdebug">
+                                <input type="hidden" name="return" value="<?php echo get_site_option('changeni_thanks_page'); ?>">
+                                <input type="hidden" name="cancel_return" value="<?php echo get_site_option('changeni_cancel_page'); ?>">
+                                <input type="hidden" name="notify_url" value="<?php echo get_site_option('changeni_ipn_url'); ?>">
                                 <input type="submit" class="button-primary" value="Donate"/>
 
                                 <?php 
@@ -479,83 +485,6 @@ function add_changeni_rewrite_rules($wp_rewrite_rules) {
 	return $wp_rewrite_rules;
 }
 
-/* update the database*/
-function changeni_update_database() {
-
-    global  $wpdb;
-    $table_name = $wpdb->prefix . CHANGENI_PAYMENTS_TABLE;
-
-    //add the table if its not present (upgrade or reactivation)
-    if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
-
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        $sql = "CREATE TABLE ".$table_name." (
-                payment_id bigint(20) NOT NULL AUTO_INCREMENT,
-                blog_id bigint(20) unsigned NOT NULL,
-                payment_date datetime NOT NULL,
-                payment_date_gmt datetime NOT NULL,
-                first_name varchar(200) NOT NULL default '',
-                last_name varchar(200) NOT NULL,
-                email varchar(200) NOT NULL,
-                payment_type varchar(20) NOT NULL,
-                amount decimal(11,2) NOT NULL DEFAULT '0',
-                PRIMARY KEY  (payment_id)
-                ) $charset_collate;";
-        $result = dbDelta($sql);
-     }
-
-    
-}
-
-/* initialize the plugin settings*/
-function changeni_init() {
-
-    //run the configuration only if at the root site
-    global $current_blog;
-
-    if($current_blog->path !== '/'){
-        return;
-    }
-
-    //trigger refresh of rewrite rules
-    global $wp_rewrite;
-
-    $wp_rewrite->flush_rules();
-
- 
-    if(!get_site_option('changeni_paypal_url')){
-	add_site_option('changeni_paypal_url', 'https://www.sandbox.paypal.com/cgi-bin/webscr');
-	//add_site_option('changeni_server_ip', '[IIS Website IP address]');
-
-    }
-
-    changeni_update_database();
-    add_site_option('changeni_db_version', '1.0.0');
-
-
-}
-
-/* Configuration Screen*/
-function changeni_admin_menu() {
-        add_menu_page( 'Changeni', 'Changeni', 'manage_options', 'changeni', 'changeni/changeni-ui.php');
-        add_submenu_page( 'changeni', 'Changeni Settings', 'Settings', 'manage_options', 'changeni/changeni-ui.php');
-	
-	//call register settings function
-	add_action( 'admin_init', 'register_changeni_settings' );
-	$plugin = plugin_basename(__FILE__); 
-	add_filter( 'plugin_action_links_' . $plugin, 'changeni_plugin_actions' );
-}
-
-
-/* Add Settings link to the plugins page*/
-function changeni_plugin_actions($links) {
-    $settings_link = '<a href="ms-admin.php?page=changeni/changeni-ui.php#changeni_options">Settings</a>';
-
-    $links = array_merge( array($settings_link), $links);
-
-    return $links;
-
-}
 
 
 /* Changeni widget*/
@@ -594,8 +523,9 @@ class Changeni_Widget extends WP_Widget {
 	function show_donation_widget($id){
             global $current_site;
 
-            $cart_url = $current_site->path . 'changeni/cart/';
-            $checkout_url = $current_site->path . 'changeni/checkout/';
+            $site_root = 'http://' . $current_site->domain;
+            $cart_url = $site_root . '/changeni/cart/';
+            $checkout_url = $site_root . '/changeni/checkout/';
             $changeni_nonce = wp_create_nonce( 'changeni-donation-add' );
 
             ob_start();
@@ -636,7 +566,7 @@ add_action('widgets_init', create_function('', 'return register_widget("Changeni
 //ajax handling
 function changeni_ajax_callback(){
 	//global $changeni_cart;
-        
+
 	if ( empty($_POST['cmd']) )
 		die(-1);
 
@@ -662,7 +592,7 @@ function changeni_ajax_callback(){
         if(!is_array($result)){
             $result = array('message' => $result);
         }
-        
+
         $result['success'] = true;
         $result['nonce'] = wp_create_nonce( 'changeni-donation-add' );
         $json_result = json_encode( $result);
@@ -676,9 +606,7 @@ function changeni_ajax_callback(){
 
 
 function changeni_add_donation($amount, $frequency){
-    global $current_blog;
-    //global $changeni_cart;
-
+    
     if(empty($amount)){
         return 'no amount specified';
     }
@@ -701,10 +629,21 @@ function changeni_add_donation($amount, $frequency){
             return 'invalid frequency';
     }
 
+    global $current_blog;
+    global $current_site;
+
+    $short_name = '';
+     if (is_subdomain_install()) {
+        $short_name = str_replace('.' . $current_site->domain, '', $current_blog->domain);
+     }
+     else{
+         $short_name = str_replace('/', '', $current_blog->path);
+     }
+
     $blog_id = $current_blog->blog_id;
     $_SESSION['changeni_cart'][$blog_id]['amount'] = $amount;
     $_SESSION['changeni_cart'][$blog_id]['frequency'] = $frequency;
-    $_SESSION['changeni_cart'][$blog_id]['short_name'] = str_replace('/', '', $current_blog->path) ;
+    $_SESSION['changeni_cart'][$blog_id]['short_name'] = $short_name;
     $_SESSION['changeni_cart'][$blog_id]['name'] = get_blog_option( $blog_id, 'blogname' );
     $cart_total = get_changeni_cart_total($_SESSION['changeni_cart']);
 
@@ -719,11 +658,11 @@ function changeni_add_donation($amount, $frequency){
 
 function display_changeni_cart_summary(){
     global $current_site;
-    
+
     //$changeni_cart = $_SESSION['changeni_cart'];
 
     $cart_total = get_changeni_cart_total($_SESSION['changeni_cart']);
-    
+
     ?>
         <div id="changeni_cart">
             <a href="/" class="main_site_link">
@@ -763,120 +702,182 @@ class Changeni_Cart {
 }
 
 
+/* update the database*/
+function changeni_update_database() {
 
-// =======================================   Foreign code beyond this point!!  =============================================
+    global  $wpdb;
+    $table_name = $wpdb->prefix . CHANGENI_PAYMENTS_TABLE;
 
+    //add the table if its not present (upgrade or reactivation)
+    if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        $sql = "CREATE TABLE ".$table_name." (
+                payment_id bigint(20) NOT NULL AUTO_INCREMENT,
+                blog_id bigint(20) unsigned NOT NULL,
+                payment_date datetime NOT NULL,
+                payment_date_gmt datetime NOT NULL,
+                first_name varchar(200) NOT NULL default '',
+                last_name varchar(200) NOT NULL,
+                email varchar(200) NOT NULL,
+                payment_type varchar(20) NOT NULL,
+                amount decimal(11,2) NOT NULL DEFAULT '0',
+                PRIMARY KEY  (payment_id)
+                ) $charset_collate;";
+        $result = dbDelta($sql);
+     }
+
+
+}
+
+/* initialize the plugin settings*/
+function changeni_init() {
+
+    //run the configuration only if at the root site
+    //global $current_blog;
+    global $current_site;
+
+    //if($current_blog->path !== '/'){
+    //    return;
+    //}
+
+    if(!is_main_site()){
+        return;
+    }
+    //trigger refresh of rewrite rules
+    global $wp_rewrite;
+
+    $wp_rewrite->flush_rules();
+
+
+    if(!get_site_option('changeni_paypal_account')){
+	add_site_option('changeni_paypal_url', 'https://www.paypal.com/cgi-bin/webscr');
+	add_site_option('changeni_ipn_url', 'http://' . $current_site->domain . '/changeni/paid/');
+        add_site_option('changeni_thanks_page', 'http://' . $current_site->domain . '/changeni/thanks/');
+        add_site_option('changeni_cancel_page', 'http://' . $current_site->domain . '/');
+        add_site_option('changeni_paypal_account', '[Paypal email]');
+
+    }
+
+    changeni_update_database();
+    add_site_option('changeni_db_version', '1.0.0');
+
+
+}
 
 /* register settings*/
 function register_changeni_settings() {
-return;
-    register_setting( 'changeni_settings', 'changeni_website_name', 'changeni_update_website_name_option' );
-	register_setting( 'changeni_settings', 'changeni_server_ip', 'changeni_update_server_ip_option' );
+
+    register_setting( 'changeni_settings', 'changeni_paypal_url', 'changeni_update_paypal_url_option' );
+    register_setting( 'changeni_settings', 'changeni_ipn_url', 'changeni_update_ipn_url_option' );
+    register_setting( 'changeni_settings', 'changeni_thanks_page', 'changeni_update_thanks_page_option' );
+    register_setting( 'changeni_settings', 'changeni_cancel_page', 'changeni_update_cancel_page_option' );
+    register_setting( 'changeni_settings', 'changeni_paypal_account', 'changeni_update_paypal_account_option' );
 }
 
 /* Update site option hack since register_setting isn't handling it*/
-function changeni_update_website_name_option($option) {
-    global $changeni_lock_website_name_option;
+function changeni_update_paypal_url_option($option) {
+    global $changeni_lock_paypal_url_option;
 
-    if($changeni_lock_website_name_option){
-        $changeni_lock_website_name_option = false;
+    if($changeni_lock_paypal_url_option){
+        $changeni_lock_paypal_url_option = false;
     }
     else{
-        $changeni_lock_website_name_option = true;
-        update_site_option('changeni_website_name', $option);
+        $changeni_lock_paypal_url_option = true;
+        update_site_option('changeni_paypal_url', $option);
     }
 
     return $option;
 }
 
-function changeni_update_server_ip_option($option) {
-    global $changeni_lock_server_ip_option;
+function changeni_update_ipn_url_option($option) {
+    global $changeni_lock_ipn_url_option;
 
-    if($changeni_lock_server_ip_option){
-        $changeni_lock_server_ip_option = false;
+    if($changeni_lock_ipn_url_option){
+        $changeni_lock_ipn_url_option = false;
     }
     else{
-        $changeni_lock_server_ip_option = true;
-        update_site_option('changeni_server_ip', $option);
+        $changeni_lock_ipn_url_option = true;
+        update_site_option('changeni_ipn_url', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_thanks_page_option($option) {
+    global $changeni_lock_thanks_page_option;
+
+    if($changeni_lock_thanks_page_option){
+        $changeni_lock_thanks_page_option = false;
+    }
+    else{
+        $changeni_lock_thanks_page_option = true;
+        update_site_option('changeni_thanks_page', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_cancel_page_option($option) {
+    global $changeni_lock_cancel_page_option;
+
+    if($changeni_lock_cancel_page_option){
+        $changeni_lock_cancel_page_option = false;
+    }
+    else{
+        $changeni_lock_cancel_page_option = true;
+        update_site_option('changeni_cancel_page', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_paypal_account_option($option) {
+    global $changeni_lock_paypal_account_option;
+
+    if($changeni_lock_paypal_account_option){
+        $changeni_lock_paypal_account_option = false;
+    }
+    else{
+        $changeni_lock_paypal_account_option = true;
+        update_site_option('changeni_paypal_account', $option);
     }
 
     return $option;
 }
 
 
+/* Configuration Screen*/
+function changeni_admin_menu() {
+        $menu_slug = 'changeni/changeni-ui.php';
+        if(!is_main_site()){
+            $menu_slug = 'changeni/changeni-donations.php';
+        }
+        add_menu_page( 'Changeni', 'Changeni', 'manage_options', $menu_slug, '', 'div');
 
+        if(is_main_site()){
+            add_submenu_page( $menu_slug, 'Changeni Settings', 'Settings', 'manage_options', 'changeni/changeni-ui.php');
+        }
 
-
-/* Register new blog*/
-function changeni_add_domain($blog_id, $user_id, $domain) {
-    changeni_update_host_header($blog_id, $domain, 'add');
-    
+        add_submenu_page( $menu_slug, 'Donations', 'Donations', 'manage_options', 'changeni/changeni-donations.php');
+	
+	//call register settings function
+	add_action( 'admin_init', 'register_changeni_settings' );
+	$plugin = plugin_basename(__FILE__); 
+	add_filter( 'plugin_action_links_' . $plugin, 'changeni_plugin_actions' );
 }
-add_action( 'wpmu_new_blog', 'changeni_add_domain', 10, 3 );
 
 
-/* Remove deleted blog*/
-function changeni_remove_domain($blog_id) {
-    $blog_details = get_blog_details($blog_id);
-    changeni_update_host_header($blog_id, $blog_details->domain, 'remove');
+/* Add Settings link to the plugins page*/
+function changeni_plugin_actions($links) {
+    $settings_link = '<a href="ms-admin.php?page=changeni/changeni-ui.php#changeni_options">Settings</a>';
+
+    $links = array_merge( array($settings_link), $links);
+
+    return $links;
 
 }
-add_action( 'delete_blog', 'changeni_remove_domain', 10, 1 );
 
 
-function changeni_update_host_header($blog_id, $domain, $cmd){
-    $hostname = $domain ;
-    $website = get_site_option('changeni_website_name');
-    $ip = get_site_option('changeni_server_ip');
-    $reg_cmd = 'iisbroker.exe' . ' /action:' . $cmd . ' /website:"' . $website . '" /hostname:' . $hostname . ' /ip:' . $ip ;
-    $output = array();
-    $error = 0;
-    $result = '';
-    exec($reg_cmd . " 2>&1", $output, $error);
-    if (($error != 0) && empty($output)){
-            $last_error = error_get_last();
-            $error = $last_error['message'];
-    }
-    else{
-            $error = '';
-            switch (strtolower($output[0])){
-                case 'added':
-                    $result = 'The domain ' . $hostname . ' has been added to IIS';
-                    break;
-                case 'removed':
-                    $result = 'The domain ' . $hostname . ' has been removed from IIS';
-                    break;
-                case 'exists':
-                    $result = 'The domain ' . $hostname . ' already exists on IIS';
-                    break;
-                case 'missing':
-                    $result = 'The domain ' . $hostname . ' is missing from IIS';
-                    break;
-                default:
-                    $error = implode(PHP_EOL, $output);
-                    break;
-            }
-    }
-
-    if(!empty($error)){
-        global  $wpdb;
-        $table_name = $wpdb->prefix . PENDING_HEADERS_TABLE;
-
-        $rows_affected = $wpdb->insert( $table_name,
-                                                array( 'blog_id' => $blog_id,
-                                                    'header_name' => $domain,
-                                                    'required_action' => $cmd,
-                                                    'last_error' => $error ) );
-        return;
-    }
-    ?>
-        <div id="changeni_message" class="updated">
-            <?php echo print_r($result, 1); ?>
-
-        </div>
-
-    <?php
-    
-}
 
 ?>

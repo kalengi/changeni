@@ -185,6 +185,20 @@ span.info_message{
 	color: #7E7E7E;
 }
 
+#toplevel_page_changeni-changeni-ui div.wp-menu-image{
+	background: transparent url('images/changeni_admin_menu_icon.png') no-repeat scroll center;
+}
+
+#changeni-admin div.icon32 {
+	background: transparent url('images/changeni_admin_page_icon.png') no-repeat scroll center -4px;
+}
+
+
+#changeni-admin table.form-table input[type="text"]{
+	width: 400px;
+}
+
+
 /* @end */
 
 
