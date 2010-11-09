@@ -185,11 +185,19 @@ span.info_message{
 	color: #7E7E7E;
 }
 
-#toplevel_page_changeni-changeni-ui div.wp-menu-image{
+#toplevel_page_changeni-changeni-ui div.wp-menu-image, #toplevel_page_changeni-changeni-donations div.wp-menu-image{
 	background: transparent url('images/changeni_admin_menu_icon.png') no-repeat scroll center;
 }
 
-#changeni-admin div.icon32 {
+#toplevel_page_changeni-changeni-ui:hover div.wp-menu-image, #toplevel_page_changeni-changeni-ui.current div.wp-menu-image, #toplevel_page_changeni-changeni-ui.wp-has-current-submenu div.wp-menu-image {
+	background: transparent url('images/changeni_admin_menu_hover_icon.png') no-repeat scroll center;
+}
+
+#toplevel_page_changeni-changeni-donations:hover div.wp-menu-image, #toplevel_page_changeni-changeni-donations.current div.wp-menu-image, #toplevel_page_changeni-changeni-donations.wp-has-current-submenu div.wp-menu-image {
+	background: transparent url('images/changeni_admin_menu_hover_icon.png') no-repeat scroll center;
+}
+
+#changeni-admin div.icon32, #changeni-report div.icon32 {
 	background: transparent url('images/changeni_admin_page_icon.png') no-repeat scroll center -4px;
 }
 

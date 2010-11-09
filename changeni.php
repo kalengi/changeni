@@ -356,6 +356,7 @@ function changeni_record_payment($thanks_page, $page_name){
             $item_code = $payment_info["item_number$i"];
             $item_code = explode('-', $item_code);
             $blog_id = $item_code[0];
+            $blog_name = get_blog_option( $blog_id, 'blogname' );
             $amount = $payment_info["mc_gross_$i"];
 
             $rows_affected = $wpdb->insert( $table_name,
@@ -366,6 +367,7 @@ function changeni_record_payment($thanks_page, $page_name){
                                                     'payment_date_gmt' => $payment_date_gmt,
                                                     'payment_type' => $payment_type,
                                                     'blog_id' => $blog_id,
+                                                    'blog_name' => $blog_name,
                                                     'amount' => $amount ) );
         }
 
@@ -709,12 +711,13 @@ function changeni_update_database() {
     $table_name = $wpdb->prefix . CHANGENI_PAYMENTS_TABLE;
 
     //add the table if its not present (upgrade or reactivation)
-    if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+   // if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         $sql = "CREATE TABLE ".$table_name." (
                 payment_id bigint(20) NOT NULL AUTO_INCREMENT,
                 blog_id bigint(20) unsigned NOT NULL,
+                blog_name varchar(200) NOT NULL default '',
                 payment_date datetime NOT NULL,
                 payment_date_gmt datetime NOT NULL,
                 first_name varchar(200) NOT NULL default '',
@@ -725,7 +728,7 @@ function changeni_update_database() {
                 PRIMARY KEY  (payment_id)
                 ) $charset_collate;";
         $result = dbDelta($sql);
-     }
+    // }
 
 
 }

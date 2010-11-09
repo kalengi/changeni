@@ -19,213 +19,104 @@
 
 
 /* 
-	File Information: Changeni ui page
+	File Information: Changeni donations page
 */
 
-changeni_admin_page();
+changeni_report_page();
 
-function changeni_admin_page() {
+function changeni_report_page() {
+	$filter = changeni_filter_donations();
 	
-	if(!empty($_POST['uninstall'])) {
-		changeni_remove_settings();
-		return;
-	}
 
-        if(isset( $_POST['doaction'] ) || isset( $_POST['doaction2'] )){
-            $bulk_ids = isset( $_POST['bulk_ids'] ) ? (array) $_POST['bulk_ids'] : array();
-            $action = $_POST['required_action'] != -1 ? $_POST['required_action'] : $_POST['required_action2'];
+        changeni_show_report($filter);
+}
 
-            foreach ( $bulk_ids as $key => $id ) {
-                changeni_do_ui_command($id, $action);
+
+
+function changeni_filter_donations($skip_date_filter = false){
+	global $current_blog;
+        global $wpdb;
+
+        $filter = '';
+        if(!is_main_site()){
+            $filter = $wpdb->prepare( "blog_id = %d", $current_blog->blog_id );
+        }
+
+        if(isset($_POST['m']) && !$skip_date_filter) {
+            $month_filter = $_POST['m'];
+            if($month_filter > 0){
+                $date_filter = $wpdb->prepare( " CONCAT(YEAR(payment_date), LPAD(MONTH(payment_date),2,'0')) = '%s'", $month_filter );
+
+                if(empty($filter)){
+                    $filter = $date_filter;
+                }
+                else{
+                    $filter .= " && ($date_filter) ";
+                }
             }
-        }
-        else{
-            $id = isset( $_GET['id'] ) ? intval( $_GET['id'] ) : 0;
-            $action = isset( $_GET['action'] ) ? $_GET['action'] : 'list';
-
-            changeni_do_ui_command($id, $action);
-        }
-
-        changeni_show_ui();
-}
-
-function changeni_do_ui_command($id, $action){
-    global  $wpdb;
-
-    
-    if($id > 0){
-        $table_name = $wpdb->prefix . PENDING_HEADERS_TABLE;
-
-        switch ( $action ) {
-            case 'execute':
-                $query = "SELECT * FROM {$table_name} WHERE header_id = {$id}";
-                $header = $wpdb->get_results( $query, ARRAY_A );
-                if($header){
-                    $header = $header[0];
-                    $required_action = $header['required_action'];
-                    $blog_details = get_blog_details($header['blog_id']);
-                    if($blog_details){
-                        if($required_action == 'add'){
-                             changeni_update_host_header($header['blog_id'], $blog_details->domain, $required_action);
-                        }
-                    }
-                    else{
-                        if($required_action == 'remove'){
-                             changeni_update_host_header($header['blog_id'], $header['header_name'], $required_action);
-                        }
-                    }
-
-                    $wpdb->query( $wpdb->prepare( "DELETE FROM $table_name WHERE header_id = %d", $id ) );
-
-                }
-                break;
-            case 'delete':
-                $wpdb->query( $wpdb->prepare( "DELETE FROM $table_name WHERE header_id = %d", $id ) );
-
-                break;
-        }
-    }
-}
-
-function changeni_remove_settings(){
-	if($_POST['uninstall'] == 'UNINSTALL Changeni'){
-		//run the configuration only if at the root site
-                global $current_blog;
-
-                if($current_blog->path !== '/'){
-                    ?>
-			<div class="wrap">
-				<h2>Cannot Uninstall</h2>
-				<p class="deactivation_message">
-					Uninstall can only be done from the main site admin.
-				</p>
-			</div>
-                    <?php
-                    return;
-                }
-                ?>
-			<div id="message" class="updated fade">
-				<?php 
-					$changeni_options = array('Paypal Url' => 'changeni_paypal_url',
-								'IPN Url' => 'changeni_ipn_url',
-								'Thanks Page' => 'changeni_thanks_page',
-								'Cancel Page' => 'changeni_cancel_page',
-								'Paypal Account' => 'changeni_paypal_account',
-								'DB version' => 'changeni_db_version');
-					foreach($changeni_options as $option_key => $option_value){
-						$delete_setting = delete_site_option($option_value);
-                                                //there may be unused local options:
-                                                delete_option($option_value);
-						if($delete_setting) {
-							?> 
-							<p class="setting_removed">Setting: <?php echo $option_key; ?> => Removed</p>
-							<?php
-						} 
-						else {
-							?> 
-							<p class="setting_not_removed">Setting: <?php echo $option_key; ?> => Not Removed </p>
-							<?php
-						}
-					}
-
-                                        //remove tablels
-                                        global  $wpdb;
-
-                                        $table_name = $wpdb->prefix . CHANGENI_PAYMENTS_TABLE;
-                                        if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name) {
-                                            $wpdb->query("DROP TABLE IF EXISTS $table_name");
-                                            ?>
-                                                <p class="setting_removed">Table: <?php echo $table_name; ?> => Removed</p>
-                                            <?php
-                                        }
-                                        else{
-                                            ?>
-                                                <p class="setting_not_removed">Table: <?php echo $table_name; ?> => Not found</p>
-                                            <?php
-                                        }
-                                        
-				?>
-			</div>
-		<?php
-		
-		$deactivate_url = 'plugins.php?action=deactivate&amp;plugin=changeni%2Fchangeni.php';
-		if(function_exists('wp_nonce_url')) { 
-			$deactivate_url = wp_nonce_url($deactivate_url, 'deactivate-plugin_changeni/changeni.php');
-		}
-		
-		?>
-			<div class="wrap">
-				<h2>Deactivate Changeni</h2>
-				<p class="deactivation_message">
-					<a href="<?php echo $deactivate_url; ?>">Click Here</a> to deactivate the Changeni plugin automatically
-				</p>
-			</div>
-		<?php
 	}
+        return $filter;
+
 }
 
-function changeni_show_ui() {
+function changeni_show_report($filter) {
 		
     ?>
 
-        <div id="changeni-admin" class="wrap">
+        <div id="changeni-report" class="wrap">
             <?php screen_icon(); ?>
-            <h2>Changeni</h2>
-            <ul id="tabs" class="changeni_tabs">
-                <li><a href="#changeni_options">IIS Website Options</a></li>
-                <li><a href="#changeni_pending_headers">Pending Headers</a></li>
-                <li><a href="#changeni_uninstall">Uninstall</a></li>
-            </ul>
-
-            <!-- Options Form -->
-            <div id="changeni_options">
-                 <h3>IIS Website Options</h3>
-                 <?php changeni_options_tab(); ?>
-            </div>
-
-            <!-- Pending Headers List -->
-            <div id="changeni_pending_headers">
-                <h3>Pending Headers</h3>
-                <?php changeni_pending_header_list_tab(); ?>
+            <h2>Donations</h2>
+            
+            <!-- Donations List -->
+            <div id="changeni_donations_list">
+                <?php 
+                    if(is_main_site()){
+                        changeni_donations_summary($filter);
+                    }
+                    else{
+                        changeni_donations_list($filter);
+                    }
+                ?>
                 
             </div>
 
-            <!-- Uninstall Plugin -->
-            <div id="changeni_uninstall">
-                <form method="post" action="<?php echo $_SERVER['PHP_SELF']; ?>?page=<?php echo plugin_basename(__FILE__); ?>">
-
-                    <h3>Uninstall Changeni plugin</h3>
-                    <p>
-                            The uninstall action removes all Changeni plugin settings that have been saved in your WordPress database. Use this prior to deactivating the plugin.
-                    </p>
-                    <p class="warning">
-                            Please note that the deleted settings cannot be recovered. Proceed only if you do not wish to use these settings any more.
-                    </p>
-                    <p class="uninstall_confirmation">
-                            <input type="submit" name="uninstall" value="UNINSTALL Changeni" class="button" onclick="return confirm('You Are About To Uninstall Changeni From WordPress.\n\n Choose [Cancel] To Stop, [OK] To Uninstall.')" />
-                    </p>
-                </form>
-            </div>
         </div>
 
     <?php
 }
 
-function changeni_pending_header_list_tab(){
+function changeni_donations_summary($filter){
     global  $wpdb;
-    
+    global $wp_locale;
+
+
     $pagenum = isset( $_GET['paged'] ) ? absint( $_GET['paged'] ) : 0;
     $pagenum =  empty($pagenum) ? 1 : $pagenum;
     $per_page = 15;
 
-    $table_name = $wpdb->prefix . PENDING_HEADERS_TABLE;
-    $query = "SELECT * FROM {$table_name} ";
-    $query .= " ORDER BY {$table_name}.header_name ";
 
-    $total = $wpdb->get_var( str_replace( 'SELECT *', 'SELECT COUNT(header_id)', $query ) );
+    $wpdb_prefix = $wpdb->prefix;
+    if(!is_main_site()){
+        $wpdb_prefix = $wpdb->get_blog_prefix( 1 );
+    }
+    $table_name = $wpdb_prefix . CHANGENI_PAYMENTS_TABLE;
+//SELECT `blog_name`, SUM(`amount`) Donations FROM `wp_changeni_payments` WHERE `payment_date` > '2010-11-05 15:35:57' GROUP BY `blog_name`
+    $query = "SELECT blog_name, SUM(amount) donations FROM {$table_name} ";
+    if(!empty($filter)){
+        $query .= " WHERE {$filter}";
+
+    }
+   
+    $total = $wpdb->get_var( str_replace( 'SELECT blog_name, SUM(amount) donations', 'SELECT COUNT(DISTINCT blog_name)', $query ) );
+
+    $total_amount = $wpdb->get_var( str_replace( 'SELECT blog_name, SUM(amount) donations', 'SELECT SUM(amount)', $query ) );
+
+    $query .= " GROUP BY blog_name";
 
     $query .= " LIMIT " . intval( ( $pagenum - 1 ) * $per_page ) . ", " . intval( $per_page );
-    $header_list = $wpdb->get_results( $query, ARRAY_A );
+    $donations_summary = $wpdb->get_results( $query, ARRAY_A );
+
+
 
     $num_pages = ceil($total / $per_page);
     $page_links = paginate_links( array(
@@ -237,19 +128,62 @@ function changeni_pending_header_list_tab(){
             'current' => $pagenum
     ));
 
-    $action_page = $_SERVER['PHP_SELF'] . '?page=' . plugin_basename(__FILE__);
+    $action_page = $current_blog->path . $_SERVER['PHP_SELF'];
+    $action_page = str_replace('//', '/', $action_page);
+    $action_page .= '?page=' . plugin_basename(__FILE__);
 
     ?>
-                <form id="form-pending-header-list" action="<?php echo $action_page; ?>" method="post">
+                <form id="form-changeni-donations-list" action="<?php echo $action_page; ?>" method="post">
                     <div class="tablenav">
-                        <div class="alignleft actions">
-                                <select name="required_action">
-                                        <option value="-1" selected="selected"><?php _e( 'Bulk Actions' ); ?></option>
-                                        <option value="execute">Execute</option>
-                                        <option value="delete">Delete</option>
-                                </select>
-                                <input type="submit" value="Apply" name="doaction" id="doaction" class="button-secondary action" />
-                                <?php wp_nonce_field( 'bulk-changeni-headers', '_wpnonce_bulk-changeni-headers' ); ?>
+                        <div class="alignleft ">
+                            <?php // view filters
+                                
+                                $query = "SELECT DISTINCT YEAR(payment_date) AS pay_year, MONTH(payment_date) AS pay_month FROM {$table_name}";
+                                $ommit_date_filter = changeni_filter_donations(true);
+                                if(!empty($ommit_date_filter)){
+                                    $query .= " WHERE {$ommit_date_filter}";
+
+                                }
+                                $query .= " ORDER BY {$table_name}.payment_date DESC";
+
+                                $month_filter = $wpdb->get_results( $query);
+
+                                $month_count = count($month_filter);
+
+                                if ( $month_count && !( 1 == $month_count && 0 == $month_filter[0]->pay_month ) ) {
+                                    $m = isset($_POST['m']) ? (int)$_POST['m'] : 0;
+                                    ?>
+                                    <select name='m'>
+                                    <option<?php selected( $m, 0 ); ?> value='0'><?php _e('All dates'); ?></option>
+                                    <?php
+                                        foreach ($month_filter as $month_filter_row) {
+                                                if ( $month_filter_row->pay_year == 0 ){
+                                                        continue;
+                                                }
+                                                $month_filter_row->pay_month = zeroise( $month_filter_row->pay_month, 2 );
+
+                                                if ( $month_filter_row->pay_year . $month_filter_row->pay_month == $m ){
+                                                        $default = ' selected="selected"';
+                                                }
+                                                else{
+                                                        $default = '';
+                                                }
+
+                                                echo "<option$default value='" . esc_attr("$month_filter_row->pay_year$month_filter_row->pay_month") . "'>";
+                                                echo $wp_locale->get_month($month_filter_row->pay_month) . " $month_filter_row->pay_year";
+                                                echo "</option>\n";
+                                        }
+                                    ?>
+                                    </select>
+                                    <input type="submit" id="post-query-submit" value="<?php esc_attr_e('Filter'); ?>" class="button-secondary" />
+                                <?php }
+                             ?>
+                            
+                        </div>
+                        <div class="clear"></div>
+
+                        <div class="alignleft ">
+                            <span class="donation_total">Total amount: $<?php echo $total_amount; ?></span>
                         </div>
 
                         <?php if ( $page_links ) { ?>
@@ -268,20 +202,22 @@ function changeni_pending_header_list_tab(){
 
                     <?php
                     // define the columns to display, the syntax is 'internal name' => 'display name'
+
                     $columns = array(
-                            'blog_id'           => __( 'Blog Id' ),
-                            'header_name'     => __( 'Domain' ),
-                            'required_action'  => __( 'Pending Action'),
-                            'last_error'   => __( 'Last Error')
+                            'blog_name'           => __( 'Organization' ),
+                            'donations'   => __( 'Amount')
                     );
 
+                    if(!is_main_site()){
+                        unset($columns['blog_name']);
+                    }
 
                     ?>
                     <table class="widefat">
                         <thead>
                                 <tr>
                                 <th class="manage-column column-cb check-column" id="cb" scope="col">
-                                        <input type="checkbox" />
+
                                 </th>
                                 <?php
                                 $col_url = '';
@@ -301,64 +237,36 @@ function changeni_pending_header_list_tab(){
                         <tfoot>
                                 <tr>
                                 <th class="manage-column column-cb check-column" id="cb1" scope="col">
-                                        <input type="checkbox" />
+
                                 </th>
                                         <?php echo $col_url ?>
                                 </tr>
                         </tfoot>
-                        <tbody id="changeni-pending-header-list" class="list:site">
+                        <tbody id="changeni-donation-list" class="list:site">
                             <?php
-                            if ( $header_list ) {
+                            if ( $donations_summary ) {
                                 $class = '';
-                                foreach ( $header_list as $header ) {
+                                foreach ( $donations_summary as $donation ) {
                                     $class = ( 'alternate' == $class ) ? '' : 'alternate';
-                                    echo "<tr class='$class'>";
+                                    ?>
+                                        <tr class='$class'>
+                                            <th valign="top" scope="row">
+                                                    
+                                            </th>
+                                    <?php
                                     foreach ( $columns as $column_name => $column_display_name ) {
                                         switch ( $column_name ) {
-                                            case 'blog_id':
-                                                ?>
-                                                        <th scope="row" class="check-column">
-                                                                <input type="checkbox" id="blog_header_<?php echo $header['header_id'] ?>" name="bulk_ids[]" value="<?php echo esc_attr( $header['header_id'] ) ?>" />
-                                                        </th>
-                                                        <th valign="top" scope="row">
-                                                                <?php echo $header['blog_id'] ?>
-                                                        </th>
-                                                <?php
-                                                break;
-                                            case 'header_name':
-                                                ?>
-                                                    <td class="column-title">
-                                                        <a href="<?php echo esc_url( admin_url( 'ms-sites._php?action=execute&amp;id=' . $header['header_id'] ) ); ?>" class="edit"><?php echo $header['header_name']; ?></a>
-                                                        <?php
-                                                            // Preordered.
-                                                            $actions = array(
-                                                                    'execute' => '',
-                                                                    'delete' => ''
-                                                            );
-
-                                                            $actions['execute'] = '<span class="execute"><a href="' . esc_url( $action_page . '&amp;action=execute&amp;id=' . $header['header_id'] ) . '">' . __( 'Execute' ) . '</a></span>';
-                                                            $actions['delete'] = '<span class="delete"><a href="' . esc_url( $action_page . '&amp;action=delete&amp;id=' . $header['header_id'] ) . '">' . __( 'Delete' ) . '</a></span>';
-                                                            $actions = array_filter( $actions );
-                                                            if ( count( $actions ) ) : ?>
-                                                            <div class="row-actions">
-                                                                    <?php echo implode( ' | ', $actions ); ?>
-                                                            </div>
-                                                            <?php endif; ?>
-
-                                                    </td>
-                                                <?php
-                                                break;
-                                            case 'required_action':
+                                            case 'blog_name':
                                                 ?>
                                                         <td valign="top">
-                                                                <?php echo $header['required_action']; ?>
+                                                                <?php echo $donation['blog_name']; ?>
                                                         </td>
                                                 <?php
                                                 break;
-                                            case 'last_error':
+                                            case 'donations':
                                                 ?>
                                                         <td valign="top">
-                                                                <?php echo $header['last_error']; ?>
+                                                                $<?php echo $donation['donations']; ?>
                                                         </td>
                                                 <?php
                                                 break;
@@ -369,10 +277,10 @@ function changeni_pending_header_list_tab(){
                             else {
                             ?>
                                 <tr>
-                                        <td colspan="<?php echo (int) count( $columns ); ?>"><?php _e( 'No pending headers found.' ) ?></td>
+                                        <td colspan="<?php echo (int) count( $columns ) + 1; ?>"><?php _e( 'No donations found.' ) ?></td>
                                 </tr>
                             <?php
-                            } // end if ($header_list)
+                            } // end if ($donations_summary)
                             ?>
 
                         </tbody>
@@ -383,46 +291,293 @@ function changeni_pending_header_list_tab(){
                                     echo "<div class='tablenav-pages'>$page_links_text</div>";
                             ?>
 
-                            <div class="alignleft actions">
-                                <select name="required_action2">
-                                        <option value="-1" selected="selected"><?php _e( 'Bulk Actions' ); ?></option>
-                                        <option value="execute">Execute</option>
-                                        <option value="delete">Delete</option>
-                                </select>
-                                <input type="submit" value="Apply" name="doaction2" id="doaction2" class="button-secondary action" />
+                            <div class="alignleft ">
+                                <span class="donation_total">Total amount: $<?php echo $total_amount; ?></span>
                             </div>
+
                             <br class="clear" />
                     </div>
                 </form>
    <?php
 }
-function changeni_options_tab(){
+
+function changeni_donations_list($filter){
+    global  $wpdb;
+    global $wp_locale;
+    global $current_blog;
+
+    
+    $pagenum = isset( $_GET['paged'] ) ? absint( $_GET['paged'] ) : 0;
+    $pagenum =  empty($pagenum) ? 1 : $pagenum;
+    $per_page = 15;
+
+
+    $wpdb_prefix = $wpdb->prefix;
+    if(!is_main_site()){
+        $wpdb_prefix = $wpdb->get_blog_prefix( 1 );
+    }
+    $table_name = $wpdb_prefix . CHANGENI_PAYMENTS_TABLE;
+
+    $query = "SELECT * FROM {$table_name} ";
+    if(!empty($filter)){
+        $query .= " WHERE {$filter}";
+        
+    }
+    $query .= " ORDER BY {$table_name}.payment_date DESC";
+
+    $total = $wpdb->get_var( str_replace( 'SELECT *', 'SELECT COUNT(payment_id)', $query ) );
+
+    $total_amount = $wpdb->get_var( str_replace( 'SELECT *', 'SELECT SUM(amount)', $query ) );
+
+
+    $query .= " LIMIT " . intval( ( $pagenum - 1 ) * $per_page ) . ", " . intval( $per_page );
+    $donations_list = $wpdb->get_results( $query, ARRAY_A );
+
+
+
+    $num_pages = ceil($total / $per_page);
+    $page_links = paginate_links( array(
+            'base' => add_query_arg( 'paged', '%#%' ),
+            'format' => '',
+            'prev_text' => __( '&laquo;' ),
+            'next_text' => __( '&raquo;' ),
+            'total' => $num_pages,
+            'current' => $pagenum
+    ));
+
+    $action_page = $current_blog->path . $_SERVER['PHP_SELF'];
+    $action_page = str_replace('//', '/', $action_page);
+    $action_page .= '?page=' . plugin_basename(__FILE__);
+
     ?>
-                <form method="post" action="options.php">
-                    <?php settings_fields( 'changeni_settings' ); ?>
-                    <?php $changeni_website_name = get_site_option('changeni_website_name'); ?>
-                    <?php $changeni_server_ip = get_site_option('changeni_server_ip'); ?>
+                <form id="form-changeni-donations-list" action="<?php echo $action_page; ?>" method="post">
+                    <div class="tablenav">
+                        <div class="alignleft ">
+                            <?php // view filters
+                                
+                                $query = "SELECT DISTINCT YEAR(payment_date) AS pay_year, MONTH(payment_date) AS pay_month FROM {$table_name}";
+                                $ommit_date_filter = changeni_filter_donations(true);
+                                if(!empty($ommit_date_filter)){
+                                    $query .= " WHERE {$ommit_date_filter}";
 
-                    <table class="form-table">
-                        <tr valign="top">
-                            <th scope="row">Website description</th>
-                            <td>
-                                  <input name="changeni_website_name" type="text" value="<?php echo $changeni_website_name; ?>"  />
-                            </td>
-                        </tr>
-                        <tr valign="top">
-                            <th scope="row">Server IP</th>
-                            <td>
-                                 <input name="changeni_server_ip" type="text" value="<?php echo $changeni_server_ip; ?>"  />
-                            </td>
-                        </tr>
+                                }
+                                $query .= " ORDER BY {$table_name}.payment_date DESC";
+
+                                $month_filter = $wpdb->get_results( $query);
+
+                                $month_count = count($month_filter);
+
+                                if ( $month_count && !( 1 == $month_count && 0 == $month_filter[0]->pay_month ) ) {
+                                    $m = isset($_POST['m']) ? (int)$_POST['m'] : 0;
+                                    ?>
+                                    <select name='m'>
+                                    <option<?php selected( $m, 0 ); ?> value='0'><?php _e('All dates'); ?></option>
+                                    <?php
+                                        foreach ($month_filter as $month_filter_row) {
+                                                if ( $month_filter_row->pay_year == 0 ){
+                                                        continue;
+                                                }
+                                                $month_filter_row->pay_month = zeroise( $month_filter_row->pay_month, 2 );
+
+                                                if ( $month_filter_row->pay_year . $month_filter_row->pay_month == $m ){
+                                                        $default = ' selected="selected"';
+                                                }
+                                                else{
+                                                        $default = '';
+                                                }
+
+                                                echo "<option$default value='" . esc_attr("$month_filter_row->pay_year$month_filter_row->pay_month") . "'>";
+                                                echo $wp_locale->get_month($month_filter_row->pay_month) . " $month_filter_row->pay_year";
+                                                echo "</option>\n";
+                                        }
+                                    ?>
+                                    </select>
+                                    <input type="submit" id="post-query-submit" value="<?php esc_attr_e('Filter'); ?>" class="button-secondary" />
+                                <?php }
+                             ?>
+
+                        </div>
+                        <div class="clear"></div>
+
+                        <div class="alignleft ">
+                            <span class="donation_total">Total amount: $<?php echo $total_amount; ?></span>
+                        </div>
+
+                        <?php if ( $page_links ) { ?>
+                        <div class="tablenav-pages">
+                            <?php $page_links_text = sprintf( '<span class="displaying-num">' . __( 'Displaying %s&#8211;%s of %s' ) . '</span>%s',
+                            number_format_i18n( ( $pagenum - 1 ) * $per_page + 1 ),
+                            number_format_i18n( min( $pagenum * $per_page, $total ) ),
+                            number_format_i18n( $total ),
+                            $page_links
+                            ); echo $page_links_text; ?>
+                        </div>
+                        <?php } ?>
+
+                    </div>
+                    <div class="clear"></div>
+
+                    <?php
+                    // define the columns to display, the syntax is 'internal name' => 'display name'
+
+                    $columns = array(
+                            'payment_id'           => __( '' ),
+                            'blog_name'           => __( 'Organization' ),
+                            'payment_date'     => __( 'Payment date' ),
+                            'amount'   => __( 'Amount'),
+                            'first_name'  => __( 'First name'),
+                            'last_name'   => __( 'Last name'),
+                            'email'   => __( 'Email')
+                    );
+
+                    if(!is_main_site()){
+                        unset($columns['blog_name']);
+                    }
+
+                    ?>
+                    <table class="widefat">
+                        <thead>
+                                <tr>
+                                <th class="manage-column column-cb check-column" id="cb" scope="col">
+                                        
+                                </th>
+                                <?php
+                                $col_url = '';
+                                foreach($columns as $column_id => $column_display_name) {
+                                        if($column_id == 'payment_id'){
+                                            continue;
+                                        }
+                                        $column_link = "<a href='";
+                                        $order2 = '';
+                                        if ( $order_by == $column_id )
+                                                $order2 = ( $order == 'DESC' ) ? 'ASC' : 'DESC';
+
+                                        $column_link .= esc_url( add_query_arg( array( 'order' => $order2, 'paged' => $pagenum, 'sortby' => $column_id ), remove_query_arg( array('action', 'updated'), $_SERVER['REQUEST_URI'] ) ) );
+                                        $column_link .= "'>{$column_display_name}</a>";
+                                        $col_url .= '<th scope="col">' . $column_link . '</th>';
+                                }
+                                echo $col_url ?>
+                                </tr>
+                        </thead>
+                        <tfoot>
+                                <tr>
+                                <th class="manage-column column-cb check-column" id="cb1" scope="col">
+                                        
+                                </th>
+                                        <?php echo $col_url ?>
+                                </tr>
+                        </tfoot>
+                        <tbody id="changeni-donation-list" class="list:site">
+                            <?php
+                            if ( $donations_list ) {
+                                $class = '';
+                                foreach ( $donations_list as $donation ) {
+                                    $class = ( 'alternate' == $class ) ? '' : 'alternate';
+                                    echo "<tr class='$class'>";
+                                    foreach ( $columns as $column_name => $column_display_name ) {
+                                        switch ( $column_name ) {
+                                            case 'payment_id':
+                                                ?>
+                                                        <th valign="top" scope="row">
+                                                                <?php echo $donation['payment_id'] ?>
+                                                        </th>
+                                                <?php
+                                                break;
+                                            case 'blog_name':
+                                                ?>
+                                                        <td valign="top">
+                                                                <?php echo $donation['blog_name']; ?>
+                                                        </td>
+                                                <?php
+                                                break;
+                                            case 'payment_date':
+                                                ?>
+                                                        <td valign="top">
+                                                                <?php echo $donation['payment_date']; ?>
+                                                        </td>
+                                                <?php
+                                                break;
+                                            case 'amount':
+                                                ?>
+                                                        <td valign="top">
+                                                                $<?php echo $donation['amount']; ?>
+                                                        </td>
+                                                <?php
+                                                break;
+                                            case 'first_name':
+                                                ?>
+                                                        <td valign="top">
+                                                                <?php echo $donation['first_name']; ?>
+                                                        </td>
+                                                <?php
+                                                break;
+                                            case 'last_name':
+                                                ?>
+                                                        <td valign="top">
+                                                                <?php echo $donation['last_name']; ?>
+                                                        </td>
+                                                <?php
+                                                break;
+                                            case 'email':
+                                                ?>
+                                                        <td valign="top">
+                                                                <?php echo $donation['email']; ?>
+                                                        </td>
+                                                <?php
+                                                break;
+                                            case 'header_name':
+                                                ?>
+                                                    <td class="column-title">
+                                                        <a href="<?php echo esc_url( admin_url( 'ms-sites._php?action=execute&amp;id=' . $donation['header_id'] ) ); ?>" class="edit"><?php echo $donation['header_name']; ?></a>
+                                                        <?php
+                                                            // Preordered.
+                                                            $actions = array(
+                                                                    'execute' => '',
+                                                                    'delete' => ''
+                                                            );
+
+                                                            $actions['execute'] = '<span class="execute"><a href="' . esc_url( $action_page . '&amp;action=execute&amp;id=' . $donation['header_id'] ) . '">' . __( 'Execute' ) . '</a></span>';
+                                                            $actions['delete'] = '<span class="delete"><a href="' . esc_url( $action_page . '&amp;action=delete&amp;id=' . $donation['header_id'] ) . '">' . __( 'Delete' ) . '</a></span>';
+                                                            $actions = array_filter( $actions );
+                                                            if ( count( $actions ) ) : ?>
+                                                            <div class="row-actions">
+                                                                    <?php echo implode( ' | ', $actions ); ?>
+                                                            </div>
+                                                            <?php endif; ?>
+
+                                                    </td>
+                                                <?php
+                                                break;
+                                        }
+                                    }
+                                }
+                            }
+                            else {
+                            ?>
+                                <tr>
+                                        <td colspan="<?php echo (int) count( $columns ); ?>"><?php _e( 'No donations found.' ) ?></td>
+                                </tr>
+                            <?php
+                            } // end if ($donations_list)
+                            ?>
+
+                        </tbody>
                     </table>
+                    <div class="tablenav">
+                            <?php
+                            if ( $page_links )
+                                    echo "<div class='tablenav-pages'>$page_links_text</div>";
+                            ?>
 
-                    <p class="submit">
-                         <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
-                    </p>
+                            <div class="alignleft ">
+                                <span class="donation_total">Total amount: $<?php echo $total_amount; ?></span>
+                            </div>
+
+                            <br class="clear" />
+                    </div>
                 </form>
-    <?php
+   <?php
 }
+
 
 ?>
