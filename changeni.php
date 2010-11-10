@@ -29,6 +29,7 @@ Author URI: http://www.dennisonwolfe.com/
 //  Database Objects
 /*==========================================================================*/
 define('CHANGENI_PAYMENTS_TABLE','changeni_payments');
+define('CHANGENI_LOGS_TABLE','changeni_logs');
 define('CHANGENI_FOLDER', WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) );
 
 
@@ -293,9 +294,7 @@ function changeni_cart_page($cart_page, $page_name){
 
 function changeni_verify_IPN($payment_info){
     $paypal_url = get_site_option('changeni_paypal_url');
-    //$payment_info = array();
     $payment_info['cmd'] = '_notify-validate';
-    //$payment_info += $_POST;
     $paypal_options = array(
             'timeout' => 5,
             'body' => $payment_info,
@@ -303,10 +302,7 @@ function changeni_verify_IPN($payment_info){
     );
 
     $verification = wp_remote_post($paypal_url, $paypal_options);
-    if(strpos($verification['body'], 'VERIFIED') > 0 ) {
-           // header( "Content-Type: text/plain" );
-           // echo 'IPN verified';
-           // exit;
+    if($verification['body'] == 'VERIFIED' ) {
            return $payment_info;
     } else {
             $log_file = $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log';
@@ -315,8 +311,22 @@ function changeni_verify_IPN($payment_info){
             fwrite($fh, $stringData);
             fclose($fh);
 
-            exit("IPN verification failure");
+            changeni_log_ipn_error('IPN verification failure', $payment_info);
+            exit;
     }
+}
+
+function changeni_log_ipn_error($message, $payment_info){
+    global  $wpdb;
+
+    $raw_data = serialize($payment_info);
+
+    $table_name = $wpdb->prefix . CHANGENI_LOGS_TABLE;
+    $rows_affected = $wpdb->insert( $table_name,
+                                                array( 'message' => $message,
+                                                    'raw_data' => $raw_data ) );
+
+    return ;
 }
 
 function changeni_record_payment($thanks_page, $page_name){
@@ -329,20 +339,38 @@ function changeni_record_payment($thanks_page, $page_name){
         $payment_info = $_POST;
         
         //ensure Paypal IPN is legit
-        //ENABLE!!!!  ---->     $payment_info = changeni_verify_IPN($payment_info);
+        $payment_info = changeni_verify_IPN($payment_info);
 
-        if(!isset($payment_info['payer_id'])){
-            exit("Invalid transaction notification");
-        }
-        //save transaction
+        //local checks
         global  $wpdb;
-        
+
+        if(strtolower($payment_info['payment_status']) !== 'completed'){
+            changeni_log_ipn_error('Transaction is in Pending status', $payment_info);
+            exit;
+        }
+
+        $paypal_account = get_site_option('changeni_paypal_account');
+        if($paypal_account !== $payment_info['receiver_email']){
+            changeni_log_ipn_error('Unknown receiver account', $payment_info);
+            exit;
+        }
+
+
         $table_name = $wpdb->prefix . CHANGENI_PAYMENTS_TABLE;
-        
+        $query = $wpdb->prepare( "SELECT COUNT(payment_id) FROM $table_name WHERE txn_id = '%s'", $payment_info['txn_id'] );
+        $duplicates = $wpdb->get_var( $query );
+
+        if(!$duplicates){
+            changeni_log_ipn_error('Duplicate transaction', $payment_info);
+            exit;
+        }
+
+        //save transaction
         $item_count = $payment_info['num_cart_items'];
         $first_name = $payment_info['first_name'];
         $last_name = $payment_info['last_name'];
         $payer_email = $payment_info['payer_email'];
+        $txn_id = $payment_info['txn_id'];
 
         $tz = get_option('timezone_string');
         date_default_timezone_set( $tz );
@@ -363,6 +391,7 @@ function changeni_record_payment($thanks_page, $page_name){
                                                 array( 'first_name' => $first_name,
                                                     'last_name' => $last_name,
                                                     'email' => $payer_email,
+                                                    'txn_id' => $txn_id,
                                                     'payment_date' => $payment_date,
                                                     'payment_date_gmt' => $payment_date_gmt,
                                                     'payment_type' => $payment_type,
@@ -713,21 +742,31 @@ function changeni_update_database() {
     //add the table if its not present (upgrade or reactivation)
    // if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
 
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        $sql = "CREATE TABLE ".$table_name." (
-                payment_id bigint(20) NOT NULL AUTO_INCREMENT,
-                blog_id bigint(20) unsigned NOT NULL,
-                blog_name varchar(200) NOT NULL default '',
-                payment_date datetime NOT NULL,
-                payment_date_gmt datetime NOT NULL,
-                first_name varchar(200) NOT NULL default '',
-                last_name varchar(200) NOT NULL,
-                email varchar(200) NOT NULL,
-                payment_type varchar(20) NOT NULL,
-                amount decimal(11,2) NOT NULL DEFAULT '0',
-                PRIMARY KEY  (payment_id)
-                ) $charset_collate;";
-        $result = dbDelta($sql);
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    $sql = "CREATE TABLE ".$table_name." (
+            payment_id bigint(20) NOT NULL AUTO_INCREMENT,
+            blog_id bigint(20) unsigned NOT NULL,
+            blog_name varchar(200) NOT NULL default '',
+            txn_id varchar(200) NOT NULL default '',
+            payment_date datetime NOT NULL,
+            payment_date_gmt datetime NOT NULL,
+            first_name varchar(200) NOT NULL default '',
+            last_name varchar(200) NOT NULL,
+            email varchar(200) NOT NULL,
+            payment_type varchar(20) NOT NULL,
+            amount decimal(11,2) NOT NULL DEFAULT '0',
+            PRIMARY KEY  (payment_id)
+            ) $charset_collate;";
+    $result = dbDelta($sql);
+
+    $table_name = $wpdb->prefix . CHANGENI_LOGS_TABLE;
+    $sql = "CREATE TABLE ".$table_name." (
+            log_id bigint(20) NOT NULL AUTO_INCREMENT,
+            message varchar(200) NOT NULL default '',
+            raw_data longtext NOT NULL,
+            PRIMARY KEY  (log_id)
+            ) $charset_collate;";
+    $result = dbDelta($sql);
     // }
 
 

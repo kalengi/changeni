@@ -130,20 +130,24 @@ function changeni_remove_settings(){
 						}
 					}
 
-                                        //remove tablels
+                                        //remove tables
                                         global  $wpdb;
 
-                                        $table_name = $wpdb->prefix . CHANGENI_PAYMENTS_TABLE;
-                                        if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name) {
-                                            $wpdb->query("DROP TABLE IF EXISTS $table_name");
-                                            ?>
-                                                <p class="setting_removed">Table: <?php echo $table_name; ?> => Removed</p>
-                                            <?php
-                                        }
-                                        else{
-                                            ?>
-                                                <p class="setting_not_removed">Table: <?php echo $table_name; ?> => Not found</p>
-                                            <?php
+                                        $table_list = array(CHANGENI_PAYMENTS_TABLE,
+                                                            CHANGENI_LOGS_TABLE);
+                                        foreach($table_list as $table_name){
+                                            $table_name = $wpdb->prefix . $table_name;
+                                            if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name) {
+                                                $wpdb->query("DROP TABLE IF EXISTS $table_name");
+                                                ?>
+                                                    <p class="setting_removed">Table: <?php echo $table_name; ?> => Removed</p>
+                                                <?php
+                                            }
+                                            else{
+                                                ?>
+                                                    <p class="setting_not_removed">Table: <?php echo $table_name; ?> => Not found</p>
+                                                <?php
+                                            }
                                         }
                                         
 				?>
