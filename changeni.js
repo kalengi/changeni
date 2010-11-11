@@ -13,19 +13,35 @@
                             if(jQ("#changeni_donation_box_content").html() == null){
                                 return;
                             }
-                            debugger;
                             var f=jQ("#changeni_donation_form form");
                             f.submit(function(){
                                     changeni.addToCart(this);
                                     return false;
                             });
-					
+
+                            changeni.updateDonationForm();
+                        },
+		updateDonationForm : function(){
+                            var recurrence=changeniJsData.recurrence;
+                            debugger;
+                            switch(recurrence){
+                                case 'monthly':
+                                    jQ("#changeni_donation_form input").attr('disabled', true);
+                                    break;
+                                case 'one-time':
+                                    jQ("#changeni_donation_form [id='donation_freq_radio_monthly']").attr('disabled', true);
+                                    break;
+                                default:
+                                    jQ("#changeni_donation_form input").attr('disabled', false);
+                                    break;
+                            }
+                            
+
                         },
 		addToCart : function(f){
                             f=jQ(f);
                             var data=f.serialize();
                             var url=changeniJsData.ajaxUrl;
-                            debugger;
                             jQ.ajax({
                                     url: url,
                                     type: 'POST',

@@ -425,6 +425,7 @@ function changeni_donations_list($filter){
                             'blog_name'           => __( 'Organization' ),
                             'payment_date'     => __( 'Payment date' ),
                             'amount'   => __( 'Amount'),
+                            'payment_type'   => __( 'Type'),
                             'first_name'  => __( 'First name'),
                             'last_name'   => __( 'Last name'),
                             'email'   => __( 'Email')
@@ -504,6 +505,13 @@ function changeni_donations_list($filter){
                                                         </td>
                                                 <?php
                                                 break;
+                                            case 'payment_type':
+                                                ?>
+                                                        <td valign="top">
+                                                                <?php echo $donation['payment_type']; ?>
+                                                        </td>
+                                                <?php
+                                                break;
                                             case 'first_name':
                                                 ?>
                                                         <td valign="top">
@@ -523,29 +531,6 @@ function changeni_donations_list($filter){
                                                         <td valign="top">
                                                                 <?php echo $donation['email']; ?>
                                                         </td>
-                                                <?php
-                                                break;
-                                            case 'header_name':
-                                                ?>
-                                                    <td class="column-title">
-                                                        <a href="<?php echo esc_url( admin_url( 'ms-sites._php?action=execute&amp;id=' . $donation['header_id'] ) ); ?>" class="edit"><?php echo $donation['header_name']; ?></a>
-                                                        <?php
-                                                            // Preordered.
-                                                            $actions = array(
-                                                                    'execute' => '',
-                                                                    'delete' => ''
-                                                            );
-
-                                                            $actions['execute'] = '<span class="execute"><a href="' . esc_url( $action_page . '&amp;action=execute&amp;id=' . $donation['header_id'] ) . '">' . __( 'Execute' ) . '</a></span>';
-                                                            $actions['delete'] = '<span class="delete"><a href="' . esc_url( $action_page . '&amp;action=delete&amp;id=' . $donation['header_id'] ) . '">' . __( 'Delete' ) . '</a></span>';
-                                                            $actions = array_filter( $actions );
-                                                            if ( count( $actions ) ) : ?>
-                                                            <div class="row-actions">
-                                                                    <?php echo implode( ' | ', $actions ); ?>
-                                                            </div>
-                                                            <?php endif; ?>
-
-                                                    </td>
                                                 <?php
                                                 break;
                                         }

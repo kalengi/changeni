@@ -352,6 +352,10 @@ div.donations_ui .alternate, div.donations_ui .alt {
     background-color: #f9f9f9;
 }
 
+div.donations_ui .changeni_cart_form {
+    float: left;
+    margin-right: 6px;
+}
 /* @end */
 
 

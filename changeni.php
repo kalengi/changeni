@@ -93,7 +93,9 @@ function changeni_load_scripts() {
     wp_enqueue_script('changeni', CHANGENI_FOLDER . '/changeni.js', array('jquery-ui-tabs', 'json2'), '1.0');
 
     $ajax_url = $current_blog->path . 'wp-admin/admin-ajax.php';
-    wp_localize_script( 'changeni', 'changeniJsData', array( 'ajaxUrl' => $ajax_url ) );
+    $recurrence = isset($_SESSION['changeni_cart_frequency']) ? strtolower($_SESSION['changeni_cart_frequency']) : 'none';
+    wp_localize_script( 'changeni', 'changeniJsData', array( 'ajaxUrl' => $ajax_url,
+                                                                'recurrence' => $recurrence) );
 }
 
 /* Load css files*/
@@ -114,7 +116,6 @@ function changeni_page($posts) {
         $request = $wp_query->query_vars['show_page'];
         $request = trim(strtolower($request));
         $page_name = 'changeni-' . $request;
-        //$page_title = '';
         switch($request){
             case 'cart':
                 $posts[0] = changeni_cart_page($posts[0], $page_name);
@@ -127,6 +128,9 @@ function changeni_page($posts) {
                 break;
             case 'thanks':
                 $posts[0] = changeni_thanks_page($posts[0], $page_name);
+                break;
+            case 'cancel':
+                $posts[0] = changeni_clear_cart($posts[0], $page_name);
                 break;
         }
 
@@ -270,9 +274,14 @@ function changeni_cart_page($cart_page, $page_name){
                 <?php
                     if ( $cart_items ) {
                     ?>
-                        <form method="post" action="/changeni/checkout/">
+                        <form method="post" action="/changeni/checkout/" class="changeni_cart_form">
                             <p class="submit">
                                 <input type="submit" class="button-primary" value="Checkout"/>
+                            </p>
+                        </form>
+                        <form method="post" action="/changeni/cancel/" class="changeni_cart_form">
+                            <p class="submit">
+                                <input type="submit" class="button-secondary" value="Clear"/>
                             </p>
                         </form>
                     <?php
@@ -344,6 +353,27 @@ function changeni_record_payment($thanks_page, $page_name){
         //local checks
         global  $wpdb;
 
+        
+        $payment_type = $payment_info['txn_type'];
+        switch(strtolower($payment_type)){
+            case 'cart':
+                $payment_type = 'one-time';
+                break;
+            case 'subscr_payment':
+                $payment_type = 'monthly';
+                break;
+            case 'subscr_failed':
+            case 'subscr_cancel':
+            case 'subscr_signup':
+            case 'subscr_eot':
+            case 'subscr_modify':
+                changeni_log_ipn_error('Subscription transaction not a payment', $payment_info);
+                exit;
+            default:
+                changeni_log_ipn_error('Unrecognized transaction type', $payment_info);
+                exit;
+        }
+
         if(strtolower($payment_info['payment_status']) !== 'completed'){
             changeni_log_ipn_error('Transaction is in Pending status', $payment_info);
             exit;
@@ -360,13 +390,12 @@ function changeni_record_payment($thanks_page, $page_name){
         $query = $wpdb->prepare( "SELECT COUNT(payment_id) FROM $table_name WHERE txn_id = '%s'", $payment_info['txn_id'] );
         $duplicates = $wpdb->get_var( $query );
 
-        if(!$duplicates){
+        if($duplicates){
             changeni_log_ipn_error('Duplicate transaction', $payment_info);
             exit;
         }
 
         //save transaction
-        $item_count = $payment_info['num_cart_items'];
         $first_name = $payment_info['first_name'];
         $last_name = $payment_info['last_name'];
         $payer_email = $payment_info['payer_email'];
@@ -374,18 +403,36 @@ function changeni_record_payment($thanks_page, $page_name){
 
         $tz = get_option('timezone_string');
         date_default_timezone_set( $tz );
-		
+
         $payment_date = strtotime($payment_info['payment_date']);
         $payment_date = date('Y-m-d H:i:s', $payment_date);
         $payment_date_gmt = get_gmt_from_date($payment_info['payment_date']);
-        $payment_type = ($payment_info['payment_type'] == 'cart') ? 'manual' : 'auto';
+
+
+        $item_count = $payment_info['num_cart_items'];
+        if($payment_type == 'monthly'){
+            $item_count = 1;
+        }
+            
         
         for($i=1; $i<=$item_count; $i++){
-            $item_code = $payment_info["item_number$i"];
+            $rows_affected = 0;
+            
+            $item_key = 'item_number';
+            $amount_key = 'mc_gross';
+            $blog_name_key = 'item_name';
+
+            if($payment_type == 'one-time'){
+                $item_key .= $i; 
+                $amount_key .= "_$i"; 
+                $blog_name_key .= $i;
+            }
+            
+            $item_code = $payment_info[$item_key];
             $item_code = explode('-', $item_code);
             $blog_id = $item_code[0];
-            $blog_name = get_blog_option( $blog_id, 'blogname' );
-            $amount = $payment_info["mc_gross_$i"];
+            $blog_name = $payment_info[$blog_name_key];
+            $amount = $payment_info[$amount_key];
 
             $rows_affected = $wpdb->insert( $table_name,
                                                 array( 'first_name' => $first_name,
@@ -398,6 +445,11 @@ function changeni_record_payment($thanks_page, $page_name){
                                                     'blog_id' => $blog_id,
                                                     'blog_name' => $blog_name,
                                                     'amount' => $amount ) );
+            if($rows_affected < 1){
+                $payment_info['sql_qry'] = $wpdb->last_query;
+                $payment_info['sql_error'] = $wpdb->last_error;
+                changeni_log_ipn_error("Unable to save transaction #$i", $payment_info);
+            }
         }
 
         header( "Content-Type: text/plain" );
@@ -408,7 +460,7 @@ function changeni_record_payment($thanks_page, $page_name){
 }
 
 function changeni_thanks_page($thanks_page, $page_name){
-    unset ($_SESSION['changeni_cart']);
+    changeni_clear_session();
     $thanks_page = changeni_init_page($thanks_page, $page_name, 'Thank you');
 
     ob_start();
@@ -427,6 +479,120 @@ function changeni_thanks_page($thanks_page, $page_name){
     return $thanks_page;
 }
 
+function changeni_clear_session(){
+    unset ($_SESSION['changeni_cart']);
+    unset ($_SESSION['changeni_cart_frequency']);
+}
+
+function changeni_clear_cart($thanks_page, $page_name){
+    changeni_clear_session();
+    $cancel_page = changeni_init_page($thanks_page, $page_name, 'Cart cleared');
+
+    ob_start();
+        ?>
+            <div id="changeni_cart_clear" class="donations_ui">
+                The donations cart has been cleared.
+            </div>
+
+    <?php
+        $page_content = ob_get_contents();
+    ob_end_clean();
+
+
+    $cancel_page->post_content = $page_content;
+
+    return $cancel_page;
+}
+
+
+function get_changeni_monthly_submission($cart_items){
+    if(!isset($cart_items) || !is_array($cart_items)){
+        return '';
+    }
+
+    ob_start();
+        ?>
+            <form action="<?php echo get_site_option('changeni_paypal_url'); ?>" method="post">
+                    <input type="submit" class="button-primary" value="Donate"/>
+                    <input type="hidden" name="cmd" value="_xclick-subscriptions">
+                    <input type="hidden" name="business" value="<?php echo get_site_option('changeni_paypal_account'); ?>">
+                    <input type="hidden" name="return" value="<?php echo get_site_option('changeni_thanks_page'); ?>">
+                    <input type="hidden" name="cancel_return" value="<?php echo get_site_option('changeni_cancel_page'); ?>">
+                    <input type="hidden" name="notify_url" value="<?php echo get_site_option('changeni_ipn_url'); ?>">
+                    <input type="hidden" name="rm" value="2">
+                    <input type="hidden" name="no_shipping" value="1" />
+                    <input type="hidden" name="no_note" value="1" />
+                    <input type="hidden" name="currency_code" value="USD">
+                    <input type="hidden" name="src" value="1" />
+                    <input type="hidden" name="sra" value="1" />
+                    
+                    <?php
+                        $item_count = 0;
+                        $recurrence_period = get_site_option('changeni_recurrence_period');
+                        foreach ( $cart_items as $blog_id => $donation ) {
+                            $item_count++;
+                    ?>
+                            <input type="hidden" name="item_name" value="<?php echo $donation['name']; ?>">
+                            <input type="hidden" name="item_number" value="<?php echo $blog_id . '-' . $donation['short_name']; ?>">
+                            <input type="hidden" name="a3" value="<?php echo $donation['amount']; ?>">
+                            <input type="hidden" name="p3" value="1">
+                            <input type="hidden" name="t3" value="<?php echo $recurrence_period; ?>">
+                            
+                    <?php
+                            //break here until a solution can be found for doing multiple subscriptions in one go...
+                            break;
+                      }
+                    ?>
+            </form>
+        <?php
+        $monthly_form = ob_get_contents();
+    ob_end_clean();
+
+    return $monthly_form;
+}
+
+function get_changeni_one_time_submission($cart_items){
+    if(!isset($cart_items) || !is_array($cart_items)){
+        return '';
+    }
+
+    ob_start();
+        ?>
+            <form action="<?php echo get_site_option('changeni_paypal_url'); ?>" method="post">
+                    <input type="submit" class="button-primary" value="Donate"/>
+                    <input type="hidden" name="cmd" value="_cart">
+                    <input type="hidden" name="upload" value="1">
+                    <input type="hidden" name="business" value="<?php echo get_site_option('changeni_paypal_account'); ?>">
+                    <input type="hidden" name="currency_code" value="USD">
+                    <input type="hidden" name="no_shipping" value="1" />
+                    <input type="hidden" name="tax" value="0" />
+                    <input type="hidden" name="no_note" value="1" />
+                    <input type="hidden" name="return" value="<?php echo get_site_option('changeni_thanks_page'); ?>">
+                    <input type="hidden" name="cancel_return" value="<?php echo get_site_option('changeni_cancel_page'); ?>">
+                    <input type="hidden" name="notify_url" value="<?php echo get_site_option('changeni_ipn_url'); ?>">
+                    
+                    <?php
+                        $item_count = 0;
+                        foreach ( $cart_items as $blog_id => $donation ) {
+                            $item_count++;
+                    ?>
+                            <input type="hidden" name="item_name_<?php echo $item_count; ?>" value="<?php echo $donation['name']; ?>">
+                            <input type="hidden" name="item_number_<?php echo $item_count; ?>" value="<?php echo $blog_id . '-' . $donation['short_name']; ?>">
+                            <input type="hidden" name="quantity_<?php echo $item_count; ?>" value="1">
+                            <input type="hidden" name="amount_<?php echo $item_count; ?>" value="<?php echo $donation['amount']; ?>">
+
+                    <?php
+                      }
+                    ?>
+            </form>
+        <?php
+        $one_time_form = ob_get_contents();
+    ob_end_clean();
+
+    return $one_time_form;
+}
+
+
 function changeni_checkout_page($checkout_page, $page_name){
     $checkout_page = changeni_init_page($checkout_page, $page_name, 'Check-out');
 
@@ -438,46 +604,22 @@ function changeni_checkout_page($checkout_page, $page_name){
                 
                 <?php
                     if ( $cart_items ) {
-                        $cart_total = get_changeni_cart_total($cart_items);
-                    ?>
-                        <form method="post" action="/changeni/donate/">
-                            <label for="donation_amount">US$</label><input name="donation_amount" id="donation_amount" type="text" value="<?php echo $cart_total->amount_total; ?>"  />
+                        //$cart_total = get_changeni_cart_total($cart_items);
 
-                            <p class="submit">
-                                <input type="submit" class="button-primary" value="Donate"/>
-                            </p>
-                        </form>
-                
-                
-                        <form action="<?php echo get_site_option('changeni_paypal_url'); ?>" method="post">
-                                <input type="hidden" name="cmd" value="_cart">
-                                <input type="hidden" name="upload" value="1">
-                                <input type="hidden" name="business" value="<?php echo get_site_option('changeni_paypal_account'); ?>">
-                                <input type="hidden" name="currency_code" value="USD">
-                                <input type="hidden" name="no_shipping" value="1" />
-                                <input type="hidden" name="tax" value="0" />
-                                <input type="hidden" name="no_note" value="1" />
-                                <input type="hidden" name="return" value="<?php echo get_site_option('changeni_thanks_page'); ?>">
-                                <input type="hidden" name="cancel_return" value="<?php echo get_site_option('changeni_cancel_page'); ?>">
-                                <input type="hidden" name="notify_url" value="<?php echo get_site_option('changeni_ipn_url'); ?>">
-                                <input type="submit" class="button-primary" value="Donate"/>
-
-                                <?php 
-                                    $item_count = 0;
-                                    foreach ( $cart_items as $blog_id => $donation ) {
-                                        $item_count++;
+                        switch(strtolower($_SESSION['changeni_cart_frequency'])){
+                            case 'monthly':
+                                echo get_changeni_monthly_submission($cart_items);
+                                break;
+                            case 'one-time':
+                                echo get_changeni_one_time_submission($cart_items);
+                                break;
+                            default:
                                 ?>
-                                        <input type="hidden" name="item_name_<?php echo $item_count; ?>" value="<?php echo $donation['name']; ?>">
-                                        <input type="hidden" name="item_number_<?php echo $item_count; ?>" value="<?php echo $blog_id . '-' . $donation['short_name']; ?>">
-                                        <input type="hidden" name="quantity_<?php echo $item_count; ?>" value="1">
-                                        <input type="hidden" name="amount_<?php echo $item_count; ?>" value="<?php echo $donation['amount']; ?>">
-                                        
+                                    <span class="error_message">Unrecognized donation frequency</span>;
                                 <?php
-                                  }
-                                ?>
-                        </form>
+                                break;
+                        }
 
-                    <?php
                     }
                 ?>
             </div>
@@ -485,8 +627,6 @@ function changeni_checkout_page($checkout_page, $page_name){
         <?php
         $page_content = ob_get_contents();
     ob_end_clean();
-
-
 
     $checkout_page->post_content = $page_content;
 
@@ -559,13 +699,14 @@ class Changeni_Widget extends WP_Widget {
             $checkout_url = $site_root . '/changeni/checkout/';
             $changeni_nonce = wp_create_nonce( 'changeni-donation-add' );
 
+            $recurrence = isset($_SESSION['changeni_cart_frequency']) ? strtolower($_SESSION['changeni_cart_frequency']) : 'monthly';
             ob_start();
                 ?>
                     <div class='changeni_donation_box' id='changeni_donation_box-<?php echo $id; ?>'>
                         <h2>Donate to this organization</h2>
                         <div class='changeni_donation_box_content' id='changeni_donation_box_content'>
                             <span class='changeni_donation_form' id='changeni_donation_form'>
-                                <form method="post" action="">
+                                <form method="post" action="" >
                                     <input name="cmd" id="changeni_cmd" type="hidden" value="add_donation"  />
                                     <input name="action" id="changeni_action" type="hidden" value="changeni_action"  />
                                     <input name="_ajax_nonce" id="changeni_ajax_nonce" type="hidden" value="<?php echo $changeni_nonce; ?>"  />
@@ -573,8 +714,8 @@ class Changeni_Widget extends WP_Widget {
                                     <input type="submit" class="button" value="Give" />
                                     <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/ajax_busy.gif'; ?>" id="ajax_busy_img"  alt="changeni submitting"/>
                                     <span class='donation_freq' id='donation_freq'>
-                                        <br /><input type="radio" id="donation_freq_radio_monthly" name="donation_freq_radio" class="donation_freq_radio" value="monthly" checked="checked" /><label class="donation_freq_label" for="donation_freq_radio_monthly">monthly</label>
-                                        <input type="radio" id="donation_freq_radio_once" name="donation_freq_radio" class="donation_freq_radio" value="one-time" /><label class="donation_freq_label" for="donation_freq_radio_once">one-time</label>
+                                        <br /><input type="radio" id="donation_freq_radio_monthly" name="donation_freq_radio" class="donation_freq_radio" value="monthly" <?php echo $recurrence == 'monthly' ? 'checked="checked"' : ''; ?> /><label class="donation_freq_label" for="donation_freq_radio_monthly">monthly</label>
+                                        <input type="radio" id="donation_freq_radio_once" name="donation_freq_radio" class="donation_freq_radio" value="one-time" <?php echo $recurrence == 'monthly' ? '' : 'checked="checked"'; ?> /><label class="donation_freq_label" for="donation_freq_radio_once">one-time</label>
                                     </span>
                                 </form>
                             </span>
@@ -672,6 +813,7 @@ function changeni_add_donation($amount, $frequency){
      }
 
     $blog_id = $current_blog->blog_id;
+    $_SESSION['changeni_cart_frequency'] = $frequency;
     $_SESSION['changeni_cart'][$blog_id]['amount'] = $amount;
     $_SESSION['changeni_cart'][$blog_id]['frequency'] = $frequency;
     $_SESSION['changeni_cart'][$blog_id]['short_name'] = $short_name;
@@ -679,6 +821,7 @@ function changeni_add_donation($amount, $frequency){
     $cart_total = get_changeni_cart_total($_SESSION['changeni_cart']);
 
     $result = array( 'message' => "Current donation is $$amount $frequency",
+            'recurrence' => $frequency ,
             'totalItems' => $cart_total->item_count ,
             'totalAmount' => $cart_total->amount_total);
 
@@ -792,12 +935,13 @@ function changeni_init() {
     $wp_rewrite->flush_rules();
 
 
-    if(!get_site_option('changeni_paypal_account')){
+    if(!get_site_option('changeni_recurrence_period')){
 	add_site_option('changeni_paypal_url', 'https://www.paypal.com/cgi-bin/webscr');
 	add_site_option('changeni_ipn_url', 'http://' . $current_site->domain . '/changeni/paid/');
         add_site_option('changeni_thanks_page', 'http://' . $current_site->domain . '/changeni/thanks/');
         add_site_option('changeni_cancel_page', 'http://' . $current_site->domain . '/');
         add_site_option('changeni_paypal_account', '[Paypal email]');
+        add_site_option('changeni_recurrence_period', 'M');
 
     }
 
@@ -815,6 +959,7 @@ function register_changeni_settings() {
     register_setting( 'changeni_settings', 'changeni_thanks_page', 'changeni_update_thanks_page_option' );
     register_setting( 'changeni_settings', 'changeni_cancel_page', 'changeni_update_cancel_page_option' );
     register_setting( 'changeni_settings', 'changeni_paypal_account', 'changeni_update_paypal_account_option' );
+    register_setting( 'changeni_settings', 'changeni_recurrence_period', 'changeni_update_recurrence_period_option' );
 }
 
 /* Update site option hack since register_setting isn't handling it*/
@@ -888,6 +1033,19 @@ function changeni_update_paypal_account_option($option) {
     return $option;
 }
 
+function changeni_update_recurrence_period_option($option) {
+    global $changeni_lock_recurrence_period_option;
+
+    if($changeni_lock_recurrence_period_option){
+        $changeni_lock_recurrence_period_option = false;
+    }
+    else{
+        $changeni_lock_recurrence_period_option = true;
+        update_site_option('changeni_recurrence_period', $option);
+    }
+
+    return $option;
+}
 
 /* Configuration Screen*/
 function changeni_admin_menu() {

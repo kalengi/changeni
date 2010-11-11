@@ -113,6 +113,7 @@ function changeni_remove_settings(){
 								'Thanks Page' => 'changeni_thanks_page',
 								'Cancel Page' => 'changeni_cancel_page',
 								'Paypal Account' => 'changeni_paypal_account',
+								'Recurrence Period' => 'changeni_recurrence_period',
 								'DB version' => 'changeni_db_version');
 					foreach($changeni_options as $option_key => $option_value){
 						$delete_setting = delete_site_option($option_value);
@@ -218,6 +219,7 @@ function changeni_options_tab(){
                     <?php $changeni_thanks_page = get_site_option('changeni_thanks_page'); ?>
                     <?php $changeni_cancel_page = get_site_option('changeni_cancel_page'); ?>
                     <?php $changeni_paypal_account = get_site_option('changeni_paypal_account'); ?>
+                    <?php $changeni_recurrence_period = get_site_option('changeni_recurrence_period'); ?>
 
                     <table class="form-table">
                         <tr valign="top">
@@ -248,6 +250,12 @@ function changeni_options_tab(){
                             <th scope="row">Paypal Account</th>
                             <td>
                                  <input name="changeni_paypal_account" type="text" value="<?php echo $changeni_paypal_account; ?>"  />
+                            </td>
+                        </tr>
+                        <tr valign="top">
+                            <th scope="row">Recurrence Period</th>
+                            <td>
+                                 <input name="changeni_recurrence_period" type="text" value="<?php echo $changeni_recurrence_period; ?>"  />
                             </td>
                         </tr>
                     </table>
