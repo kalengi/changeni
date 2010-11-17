@@ -338,6 +338,7 @@ div.donations_ui {
     border-radius: 5px;
     padding: 5px 5px 5px 15px;
     width: 560px;
+	float: left;
 }
 
 div.donations_ui .widefat * {
