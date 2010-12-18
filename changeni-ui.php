@@ -114,6 +114,10 @@ function changeni_remove_settings(){
 								'Cancel Page' => 'changeni_cancel_page',
 								'Paypal Account' => 'changeni_paypal_account',
 								'Recurrence Period' => 'changeni_recurrence_period',
+								'Paypal API Version' => 'changeni_paypal_api_version',
+								'Paypal API Username' => 'changeni_paypal_api_username',
+								'Paypal API Password' => 'changeni_paypal_api_password',
+								'Paypal API Signature' => 'changeni_paypal_api_signature',
 								'DB version' => 'changeni_db_version');
 					foreach($changeni_options as $option_key => $option_value){
 						$delete_setting = delete_site_option($option_value);
@@ -220,6 +224,10 @@ function changeni_options_tab(){
                     <?php $changeni_cancel_page = get_site_option('changeni_cancel_page'); ?>
                     <?php $changeni_paypal_account = get_site_option('changeni_paypal_account'); ?>
                     <?php $changeni_recurrence_period = get_site_option('changeni_recurrence_period'); ?>
+                    <?php $changeni_paypal_api_version = get_site_option('changeni_paypal_api_version'); ?>
+                    <?php $changeni_paypal_api_username = get_site_option('changeni_paypal_api_username'); ?>
+                    <?php $changeni_paypal_api_password = get_site_option('changeni_paypal_api_password'); ?>
+                    <?php $changeni_paypal_api_signature = get_site_option('changeni_paypal_api_signature'); ?>
 
                     <table class="form-table">
                         <tr valign="top">
@@ -256,6 +264,30 @@ function changeni_options_tab(){
                             <th scope="row">Recurrence Period</th>
                             <td>
                                  <input name="changeni_recurrence_period" type="text" value="<?php echo $changeni_recurrence_period; ?>"  />
+                            </td>
+                        </tr>
+                        <tr valign="top">
+                            <th scope="row">Paypal API Version</th>
+                            <td>
+                                 <input name="changeni_paypal_api_version" type="text" value="<?php echo $changeni_paypal_api_version; ?>"  />
+                            </td>
+                        </tr>
+                        <tr valign="top">
+                            <th scope="row">Paypal API Username</th>
+                            <td>
+                                 <input name="changeni_paypal_api_username" type="text" value="<?php echo $changeni_paypal_api_username; ?>"  />
+                            </td>
+                        </tr>
+                        <tr valign="top">
+                            <th scope="row">Paypal API Password</th>
+                            <td>
+                                 <input name="changeni_paypal_api_password" type="text" value="<?php echo $changeni_paypal_api_password; ?>"  />
+                            </td>
+                        </tr>
+                        <tr valign="top">
+                            <th scope="row">Paypal API Signature</th>
+                            <td>
+                                 <input name="changeni_paypal_api_signature" type="text" value="<?php echo $changeni_paypal_api_signature; ?>"  />
                             </td>
                         </tr>
                     </table>

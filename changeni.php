@@ -955,13 +955,17 @@ function changeni_init() {
     $wp_rewrite->flush_rules();
 
 
-    if(!get_site_option('changeni_recurrence_period')){
+    if(!get_site_option('changeni_paypal_api_signature')){
 	add_site_option('changeni_paypal_url', 'https://www.paypal.com/cgi-bin/webscr');
 	add_site_option('changeni_ipn_url', 'http://' . $current_site->domain . '/changeni/paid/');
         add_site_option('changeni_thanks_page', 'http://' . $current_site->domain . '/changeni/thanks/');
         add_site_option('changeni_cancel_page', 'http://' . $current_site->domain . '/');
         add_site_option('changeni_paypal_account', '[Paypal email]');
         add_site_option('changeni_recurrence_period', 'M');
+        add_site_option('changeni_paypal_api_version', '56.0');
+        add_site_option('changeni_paypal_api_username', '[api_username]');
+        add_site_option('changeni_paypal_api_password', '[api_password]');
+        add_site_option('changeni_paypal_api_signature', '[api_signature]');
 
     }
 
@@ -980,6 +984,11 @@ function register_changeni_settings() {
     register_setting( 'changeni_settings', 'changeni_cancel_page', 'changeni_update_cancel_page_option' );
     register_setting( 'changeni_settings', 'changeni_paypal_account', 'changeni_update_paypal_account_option' );
     register_setting( 'changeni_settings', 'changeni_recurrence_period', 'changeni_update_recurrence_period_option' );
+    register_setting( 'changeni_settings', 'changeni_paypal_api_version', 'changeni_update_paypal_api_version_option' );
+    register_setting( 'changeni_settings', 'changeni_paypal_api_username', 'changeni_update_paypal_api_username_option' );
+    register_setting( 'changeni_settings', 'changeni_paypal_api_password', 'changeni_update_paypal_api_password_option' );
+    register_setting( 'changeni_settings', 'changeni_paypal_api_signature', 'changeni_update_paypal_api_signature_option' );
+
 }
 
 /* Update site option hack since register_setting isn't handling it*/
@@ -1062,6 +1071,62 @@ function changeni_update_recurrence_period_option($option) {
     else{
         $changeni_lock_recurrence_period_option = true;
         update_site_option('changeni_recurrence_period', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_paypal_api_version_option($option) {
+    global $changeni_lock_paypal_api_version_option;
+
+    if($changeni_lock_paypal_api_version_option){
+        $changeni_lock_paypal_api_version_option = false;
+    }
+    else{
+        $changeni_lock_paypal_api_version_option = true;
+        update_site_option('changeni_paypal_api_version', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_paypal_api_username_option($option) {
+    global $changeni_lock_paypal_api_username_option;
+
+    if($changeni_lock_paypal_api_username_option){
+        $changeni_lock_paypal_api_username_option = false;
+    }
+    else{
+        $changeni_lock_paypal_api_username_option = true;
+        update_site_option('changeni_paypal_api_username', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_paypal_api_password_option($option) {
+    global $changeni_lock_paypal_api_password_option;
+
+    if($changeni_lock_paypal_api_password_option){
+        $changeni_lock_paypal_api_password_option = false;
+    }
+    else{
+        $changeni_lock_paypal_api_password_option = true;
+        update_site_option('changeni_paypal_api_password', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_paypal_api_signature_option($option) {
+    global $changeni_lock_paypal_api_signature_option;
+
+    if($changeni_lock_paypal_api_signature_option){
+        $changeni_lock_paypal_api_signature_option = false;
+    }
+    else{
+        $changeni_lock_paypal_api_signature_option = true;
+        update_site_option('changeni_paypal_api_signature', $option);
     }
 
     return $option;
