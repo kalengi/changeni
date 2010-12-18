@@ -286,7 +286,7 @@ div.changeni_donation_box_content span.action_links {
 
 /*@ Shopping cart bar */
 
-div#changeni_cart {
+div#changeni_bar {
     z-index: 1001 !important;
     background: url('images/cart_bkg.gif') top left !important;
     color: #ffffff !important;
@@ -300,9 +300,21 @@ div#changeni_cart {
     width: 100% !important;
 }
 
-div#changeni_cart a.main_site_link {
+div#changeni_bar a.main_site_link {
     float: left;
+    height: 28px;
     text-decoration: none;
+    border: none;
+}
+
+div#changeni_bar select {
+    border: 1px solid #000000;
+    display: block;
+    float: left;
+    margin-left: 15px;
+    margin-top: 4px;
+    padding: 0px !important;
+    width: 180px;
 }
 
 img#changeni_logo {
@@ -311,12 +323,15 @@ img#changeni_logo {
 
 }
 
-div#changeni_cart h2 {
+div#changeni_bar h2 {
+    color: #111111;
     float: left;
-
+    font-size: 1.5em;
+    font-weight: 400;
+    margin-top: 0px;
 }
 
-div.changeni_cart_info {
+div.changeni_bar_info {
     float: right;
     padding-right: 10px;
 }

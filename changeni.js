@@ -10,9 +10,21 @@
 		{
 		siteUrl: '',
 		init : function(){
+                            var ls=jQ("#changeni_network_list");
+                            if(ls.html() == null){
+                                return;
+                            }
+
+                            ls.change(function(){
+                                    var url = jQ(this).val();
+                                    jQ(location).attr('href',url);
+                                    return false;
+                            });
+
                             if(jQ("#changeni_donation_box_content").html() == null){
                                 return;
                             }
+                            
                             var f=jQ("#changeni_donation_form form");
                             f.submit(function(){
                                     changeni.addToCart(this);
@@ -23,7 +35,6 @@
                         },
 		updateDonationForm : function(){
                             var recurrence=changeniJsData.recurrence;
-                            debugger;
                             switch(recurrence){
                                 case 'monthly':
                                     jQ("#changeni_donation_form input").attr('disabled', true);
@@ -48,8 +59,7 @@
                                     data: data,
                                     dataType: 'json',
                                     success:function(result, status, XMLHttpRequest){
-                                            debugger;
-
+                                            
                                             jQ("#info_message").html(result.message);
                                             jQ("#changeni_item_count").html(result.totalItems);
                                             jQ("#changeni_amount_total").html(result.totalAmount);

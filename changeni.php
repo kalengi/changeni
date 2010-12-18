@@ -65,7 +65,7 @@ else{
 	add_action('wp_print_scripts', 'changeni_load_scripts' );
 
         //shopping cart bar
-        add_action( 'wp_footer', 'display_changeni_cart_summary' );
+        add_action( 'wp_footer', 'display_changeni_bar' );
 	
 }
 
@@ -720,7 +720,7 @@ class Changeni_Widget extends WP_Widget {
                                 </form>
                             </span>
                             <span class='action_links' id='action_links'>
-                                <a href="<?php echo $cart_url; ?>">veiw cart</a> &nbsp; | &nbsp; <a href="<?php echo $checkout_url; ?>">checkout</a>
+                                <a href="<?php echo $cart_url; ?>">view cart</a> &nbsp; | &nbsp; <a href="<?php echo $checkout_url; ?>">checkout</a>
                             </span>
                         </div>
                     </div>
@@ -830,22 +830,42 @@ function changeni_add_donation($amount, $frequency){
 }
 
 
-function display_changeni_cart_summary(){
+function display_changeni_bar(){
+    global $current_blog;
     global $current_site;
-
-    //$changeni_cart = $_SESSION['changeni_cart'];
+    global $wpdb;
 
     $cart_total = get_changeni_cart_total($_SESSION['changeni_cart']);
 
     ?>
-        <div id="changeni_cart">
+        <div id="changeni_bar">
             <a href="/" class="main_site_link">
                 <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/hat.png'; ?>" id="changeni_logo"  alt="changeni logo"/>
                 <h2><?php echo $current_site->site_name ; ?></h2>
+                
             </a>
-            <div class="changeni_cart_info" >Total amount: <span id="changeni_amount_total"><?php echo $cart_total->amount_total ; ?></span></div>
-            <div class="changeni_cart_info" > Total items: <span id="changeni_item_count"><?php echo $cart_total->item_count ; ?></span></div>
-            <div class="changeni_cart_info" id="info_message"></div>
+            <select id="changeni_network_list" >
+                <option selected="selected" value="#">Select a Local Non-Profit</option>
+                <?php
+                    $query = "SELECT blog_id FROM {$wpdb->blogs} WHERE site_id = '{$wpdb->siteid}' ";
+                    $query .= " && blog_id NOT IN (1, $current_blog->blog_id)";
+                    $blog_ids = $wpdb->get_col($wpdb->prepare($query));
+                    $blog_list = array();
+                    foreach ($blog_ids as $blog_id) {
+                        $blog_name = get_blog_option( $blog_id, 'blogname' );
+                        $blog_url = get_blog_option( $blog_id, 'siteurl' );
+                        $blog_list[$blog_name] = $blog_url;
+                    }
+
+                    ksort($blog_list);
+                ?>
+                <?php foreach ($blog_list as $blog_name => $blog_url) { ?>
+                        <option value="<?php echo $blog_url ; ?>"><?php echo $blog_name ; ?></option>
+                <?php } ?>
+            </select>
+            <div class="changeni_bar_info" >Total amount: <span id="changeni_amount_total"><?php echo $cart_total->amount_total ; ?></span></div>
+            <div class="changeni_bar_info" > Total items: <span id="changeni_item_count"><?php echo $cart_total->item_count ; ?></span></div>
+            <div class="changeni_bar_info" id="info_message"></div>
         </div>
     <?php
 
