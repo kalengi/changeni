@@ -37,7 +37,8 @@
                             var recurrence=changeniJsData.recurrence;
                             switch(recurrence){
                                 case 'monthly':
-                                    jQ("#changeni_donation_form input").attr('disabled', true);
+                                    //jQ("#changeni_donation_form input").attr('disabled', true);
+                                    jQ("#changeni_donation_form [id='donation_freq_radio_once']").attr('disabled', true);
                                     break;
                                 case 'one-time':
                                     jQ("#changeni_donation_form [id='donation_freq_radio_monthly']").attr('disabled', true);

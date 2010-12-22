@@ -114,6 +114,7 @@ function changeni_remove_settings(){
 								'Cancel Page' => 'changeni_cancel_page',
 								'Paypal Account' => 'changeni_paypal_account',
 								'Recurrence Period' => 'changeni_recurrence_period',
+								'Paypal API Url' => 'changeni_paypal_api_url',
 								'Paypal API Version' => 'changeni_paypal_api_version',
 								'Paypal API Username' => 'changeni_paypal_api_username',
 								'Paypal API Password' => 'changeni_paypal_api_password',
@@ -224,9 +225,10 @@ function changeni_options_tab(){
                     <?php $changeni_cancel_page = get_site_option('changeni_cancel_page'); ?>
                     <?php $changeni_paypal_account = get_site_option('changeni_paypal_account'); ?>
                     <?php $changeni_recurrence_period = get_site_option('changeni_recurrence_period'); ?>
+                    <?php $changeni_paypal_api_url = get_site_option('changeni_paypal_api_url'); ?>
                     <?php $changeni_paypal_api_version = get_site_option('changeni_paypal_api_version'); ?>
                     <?php $changeni_paypal_api_username = get_site_option('changeni_paypal_api_username'); ?>
-                    <?php $changeni_paypal_api_password = get_site_option('changeni_paypal_api_password'); ?>
+                    <?php $changeni_paypal_api_password = ''; ?>
                     <?php $changeni_paypal_api_signature = get_site_option('changeni_paypal_api_signature'); ?>
 
                     <table class="form-table">
@@ -264,6 +266,12 @@ function changeni_options_tab(){
                             <th scope="row">Recurrence Period</th>
                             <td>
                                  <input name="changeni_recurrence_period" type="text" value="<?php echo $changeni_recurrence_period; ?>"  />
+                            </td>
+                        </tr>
+                        <tr valign="top">
+                            <th scope="row">Paypal API Url</th>
+                            <td>
+                                 <input name="changeni_paypal_api_url" type="text" value="<?php echo $changeni_paypal_api_url; ?>"  />
                             </td>
                         </tr>
                         <tr valign="top">

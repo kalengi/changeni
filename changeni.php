@@ -123,6 +123,9 @@ function changeni_page($posts) {
             case 'checkout':
                 $posts[0] = changeni_checkout_page($posts[0], $page_name);
                 break;
+            case 'process':
+                $posts[0] = changeni_process_payment($posts[0], $page_name);
+                break;
             case 'paid':
                 $posts[0] = changeni_record_payment($posts[0], $page_name);
                 break;
@@ -360,6 +363,8 @@ function changeni_record_payment($thanks_page, $page_name){
                 $payment_type = 'one-time';
                 break;
             case 'subscr_payment':
+            case 'recurring_payment':
+            case 'recurring_payment_outstanding_payment':
                 $payment_type = 'monthly';
                 break;
             case 'subscr_failed':
@@ -367,6 +372,12 @@ function changeni_record_payment($thanks_page, $page_name){
             case 'subscr_signup':
             case 'subscr_eot':
             case 'subscr_modify':
+            case 'recurring_payment_profile_created':
+            case 'recurring_payment_profile_cancel':
+            case 'recurring_payment_expired':
+            case 'recurring_payment_failed':
+            case 'recurring_payment_skipped':
+            case 'recurring_payment_outstanding_payment_failed':
                 changeni_log_ipn_error('Subscription transaction not a payment', $payment_info);
                 exit;
             default:
@@ -418,12 +429,14 @@ function changeni_record_payment($thanks_page, $page_name){
         for($i=1; $i<=$item_count; $i++){
             $rows_affected = 0;
             
-            $item_key = 'item_number';
+            $item_key = 'rp_invoice_id'; //'item_number'; ==> works with WPS
             $amount_key = 'mc_gross';
-            $blog_name_key = 'item_name';
+            $blog_name_key = 'product_name'; // 'item_name'; ==> works with WPS
 
             if($payment_type == 'one-time'){
-                $item_key .= $i; 
+                $item_key = 'item_number';
+                $blog_name_key = 'item_name';
+                $item_key .= $i;
                 $amount_key .= "_$i"; 
                 $blog_name_key .= $i;
             }
@@ -505,93 +518,367 @@ function changeni_clear_cart($thanks_page, $page_name){
 }
 
 
-function get_changeni_monthly_submission($cart_items){
+function process_changeni_monthly_payment($cart_items){
     if(!isset($cart_items) || !is_array($cart_items)){
         return '';
     }
 
-    ob_start();
-        ?>
-            <form action="<?php echo get_site_option('changeni_paypal_url'); ?>" method="post">
-                    <input type="submit" class="button-primary" value="Donate"/>
-                    <input type="hidden" name="cmd" value="_xclick-subscriptions">
-                    <input type="hidden" name="business" value="<?php echo get_site_option('changeni_paypal_account'); ?>">
-                    <input type="hidden" name="return" value="<?php echo get_site_option('changeni_thanks_page'); ?>">
-                    <input type="hidden" name="cancel_return" value="<?php echo get_site_option('changeni_cancel_page'); ?>">
-                    <input type="hidden" name="notify_url" value="<?php echo get_site_option('changeni_ipn_url'); ?>">
-                    <input type="hidden" name="rm" value="2">
-                    <input type="hidden" name="no_shipping" value="1" />
-                    <input type="hidden" name="no_note" value="1" />
-                    <input type="hidden" name="currency_code" value="USD">
-                    <input type="hidden" name="src" value="1" />
-                    <input type="hidden" name="sra" value="1" />
-                    
-                    <?php
-                        $item_count = 0;
-                        $recurrence_period = get_site_option('changeni_recurrence_period');
-                        foreach ( $cart_items as $blog_id => $donation ) {
-                            $item_count++;
-                    ?>
-                            <input type="hidden" name="item_name" value="<?php echo $donation['name']; ?>">
-                            <input type="hidden" name="item_number" value="<?php echo $blog_id . '-' . $donation['short_name']; ?>">
-                            <input type="hidden" name="a3" value="<?php echo $donation['amount']; ?>">
-                            <input type="hidden" name="p3" value="1">
-                            <input type="hidden" name="t3" value="<?php echo $recurrence_period; ?>">
-                            
-                    <?php
-                            //break here until a solution can be found for doing multiple subscriptions in one go...
-                            break;
-                      }
-                    ?>
-            </form>
-        <?php
-        $monthly_form = ob_get_contents();
-    ob_end_clean();
+    $subscription_suffix = ' Monthly Donation';
+    $recurrence_period = get_site_option('changeni_recurrence_period');
+    $thanks_page_url = get_site_option('changeni_thanks_page');
+    $ipn_url = get_site_option('changeni_ipn_url');
+    $paypal_url = get_site_option('changeni_paypal_url');
+    $paypal_api_url = get_site_option('changeni_paypal_api_url');
+    $paypal_api_version = get_site_option('changeni_paypal_api_version');
+    $paypal_api_username = get_site_option('changeni_paypal_api_username');
+    $paypal_api_password = get_site_option('changeni_paypal_api_password');
+    $paypal_api_password = base64_decode($paypal_api_password);
+    $paypal_api_signature = get_site_option('changeni_paypal_api_signature');
 
-    return $monthly_form;
+    $credentials = '&VERSION=' . urlencode($paypal_api_version) . '&PWD=' . urlencode($paypal_api_password) . '&USER=' . urlencode($paypal_api_username) . '&SIGNATURE=' . urlencode($paypal_api_signature);
+
+    $token = $_REQUEST['token'];
+
+    if(!isset($token)) {
+        $ipn_url_parts = parse_url($ipn_url);
+        $base_url = $ipn_url_parts['scheme'] . '://' . $ipn_url_parts['host'];
+
+        $return_url = $base_url . '/changeni/process/';
+        if(!empty($ipn_url_parts['query'])){
+            $return_url .= '?' . $ipn_url_parts['query'];
+        }
+
+        $return_url = urlencode($return_url);
+        $cancel_url = urlencode(get_site_option('changeni_cancel_page'));
+
+        $nvp_request = "&RETURNURL=$return_url&CANCELURL=$cancel_url";
+        $nvp_request .= '&NOSHIPPING=1' . '&ALLOWNOTE=0' ;
+        
+        $total_amount = 0.00;
+        $item_name = '';
+        $item_number = '';
+        $amount = 0.00;
+        $quantity = 1;
+
+        $item_count = 0;
+        foreach ( $cart_items as $blog_id => $donation ) {
+            $total_amount += $donation['amount'];
+            $item_name = urlencode($donation['name']);
+            //$item_number = urlencode($blog_id . '-' . $donation['short_name']);
+            //$amount = $donation['amount'];
+
+            //$nvp_request .= "&PAYMENTREQUEST_$item_count".'_PAYMENTACTION=Sale' . "&PAYMENTREQUEST_$item_count".'_CURRENCYCODE=USD' ;
+            //$nvp_request .= "&PAYMENTREQUEST_$item_count".'_CURRENCYCODE=USD' . "&PAYMENTREQUEST_$item_count".'_AMT=' . $amount ;
+            $nvp_request .= "&L_BILLINGTYPE$item_count=RecurringPayments" ;
+            $nvp_request .= "&L_BILLINGAGREEMENTDESCRIPTION$item_count=" . $item_name; // . $subscription_suffix ;
+            //$nvp_request .= "&L_PAYMENTREQUEST_$item_count".'_NAME0=' . $item_name . "&L_PAYMENTREQUEST_$item_count".'_AMT0=' . $amount ;
+            //$nvp_request .= "&L_PAYMENTREQUEST_$item_count".'_QTY0=' . $quantity . "&L_PAYMENTREQUEST_$item_count".'_NUMBER0=' . $item_number;
+
+            
+            $item_count++;
+        }
+
+        $nvp_request .= '&MAXAMT=' . $total_amount;
+
+        $nvp_request = $credentials . $nvp_request;
+
+        $http_parsed_response_array = changeni_call_paypal_api('SetExpressCheckout', $nvp_request, $paypal_api_url);
+
+        $ack = strtoupper($http_parsed_response_array["ACK"]);
+        if($ack == 'SUCCESS' || $ack == 'SUCCESSWITHWARNING') {
+                // Redirect to paypal.com.
+                $token = urldecode($http_parsed_response_array["TOKEN"]);
+                $paypal_url = "$paypal_url&cmd=_express-checkout&token=$token";
+
+                header("Location: $paypal_url");
+                exit;
+        } else  {
+                exit('SetExpressCheckout failed: ' . print_r($http_parsed_response_array, true));
+        }
+
+
+    }
+    else{
+        $token = urlencode( $_REQUEST['token']);
+        $nvp_request = "&TOKEN=" . $token;
+
+        $nvp_request = $credentials . $nvp_request;
+
+        $http_parsed_response_array = changeni_call_paypal_api('GetExpressCheckoutDetails', $nvp_request, $paypal_api_url);
+
+        $ack = strtoupper($http_parsed_response_array["ACK"]);
+
+       if($ack == 'SUCCESS' || $ack == 'SUCCESSWITHWARNING'){
+            $token = urlencode( $http_parsed_response_array['TOKEN']);
+            $payer_id = urlencode($http_parsed_response_array['PAYERID']);
+            $payer_email = urlencode($http_parsed_response_array['EMAIL']);
+            //$total_amount = urlencode($http_parsed_response_array['PAYMENTREQUEST_0_AMT']);
+            $billing_frequency = 1;
+
+            $profile_start_date = $http_parsed_response_array["TIMESTAMP"];
+            //$date_parts = explode('T', $profile_start_date); //example $profile_start_date = 2010-12-22T01:45:01Z
+            //$next_date = strtotime(date("Y-m-d", strtotime($profile_start_date)) . " +1 " . strtolower($recurrence_period));
+            //$next_date = date('Y-m-dTH:i:sZ', $next_date);
+            //$next_date = substr($next_date, 0, 10);
+            //$profile_start_date = $next_date . 'T' . $date_parts[1];
+            $profile_start_date = urlencode($profile_start_date);
+            
+            
+            $item_count = 0;
+            foreach ( $cart_items as $blog_id => $donation ) {
+                //$item_name = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_$item_count".'_NAME0']);
+                //$item_number = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_$item_count".'_NUMBER0']);
+                //$amount = $http_parsed_response_array["L_PAYMENTREQUEST_$item_count".'_AMT0'];
+                //$currency = $http_parsed_response_array["PAYMENTREQUEST_$item_count".'_CURRENCYCODE'];
+                //$quantity = $http_parsed_response_array["L_PAYMENTREQUEST_$item_count".'_QTY0'];
+                $item_name = urlencode($donation['name']);
+                $item_number = urlencode($blog_id . '-' . $donation['short_name']);
+                $amount = $donation['amount'];
+                $currency = 'USD';
+                
+
+                $nvp_request = "&TOKEN=" . $token . '&PAYERID=' . $payer_id . '&EMAIL=' . $payer_email . '&CURRENCYCODE=' . $currency;
+                $nvp_request .= '&NOSHIPPING=1' . '&ALLOWNOTE=0' . '&AUTOBILLAMT=AddToNextBilling'  ;
+                $nvp_request .= '&PROFILESTARTDATE=' . $profile_start_date . '&PROFILEREFERENCE=' . $item_number . '&DESC=' . $item_name; // . $subscription_suffix;
+                $nvp_request .= "&L_BILLINGTYPE$item_count=RecurringPayments" . '&BILLINGPERIOD=' . $recurrence_period . '&BILLINGFREQUENCY=' . $billing_frequency;
+                $nvp_request .= '&AMT=' . $amount; // . '&INITAMT=' . $amount;
+                //$nvp_request .= '&TRIALBILLINGPERIOD=' . $recurrence_period . '&TRIALBILLINGFREQUENCY=' . $billing_frequency . '&TRIALAMT=0';
+                //$nvp_request .= '&TRIALTOTALBILLINGCYCLES=1' . '&INITAMT=' . $amount . '&FAILEDINITAMTACTION=ContinueOnFailure' ;
+
+                $nvp_request = $credentials . $nvp_request;
+
+                $http_parsed_response_array = changeni_call_paypal_api('CreateRecurringPaymentsProfile', $nvp_request, $paypal_api_url);
+
+                $ack = strtoupper($http_parsed_response_array["ACK"]);
+
+                if(!($ack == 'SUCCESS' || $ack == 'SUCCESSWITHWARNING')){
+                    exit("CreateRecurringPaymentsProfile failed for $item_name: " . print_r($http_parsed_response_array, true));
+                }
+
+                $item_count++;
+            }
+
+            
+            header("Location: $thanks_page_url");
+            exit;
+            
+        }
+        else{
+            exit('GetExpressCheckoutDetails failed: ' . print_r($http_parsed_response_array, true));
+        }
+    }
+
+    
 }
 
-function get_changeni_one_time_submission($cart_items){
+function process_changeni_one_time_payment($cart_items){
     if(!isset($cart_items) || !is_array($cart_items)){
         return '';
     }
 
-    ob_start();
-        ?>
-            <form action="<?php echo get_site_option('changeni_paypal_url'); ?>" method="post">
-                    <input type="submit" class="button-primary" value="Donate"/>
-                    <input type="hidden" name="cmd" value="_cart">
-                    <input type="hidden" name="upload" value="1">
-                    <input type="hidden" name="business" value="<?php echo get_site_option('changeni_paypal_account'); ?>">
-                    <input type="hidden" name="currency_code" value="USD">
-                    <input type="hidden" name="no_shipping" value="1" />
-                    <input type="hidden" name="tax" value="0" />
-                    <input type="hidden" name="no_note" value="1" />
-                    <input type="hidden" name="return" value="<?php echo get_site_option('changeni_thanks_page'); ?>">
-                    <input type="hidden" name="cancel_return" value="<?php echo get_site_option('changeni_cancel_page'); ?>">
-                    <input type="hidden" name="notify_url" value="<?php echo get_site_option('changeni_ipn_url'); ?>">
-                    
-                    <?php
-                        $item_count = 0;
-                        foreach ( $cart_items as $blog_id => $donation ) {
-                            $item_count++;
-                    ?>
-                            <input type="hidden" name="item_name_<?php echo $item_count; ?>" value="<?php echo $donation['name']; ?>">
-                            <input type="hidden" name="item_number_<?php echo $item_count; ?>" value="<?php echo $blog_id . '-' . $donation['short_name']; ?>">
-                            <input type="hidden" name="quantity_<?php echo $item_count; ?>" value="1">
-                            <input type="hidden" name="amount_<?php echo $item_count; ?>" value="<?php echo $donation['amount']; ?>">
+    $thanks_page_url = get_site_option('changeni_thanks_page');
+    $ipn_url = get_site_option('changeni_ipn_url');
+    $paypal_url = get_site_option('changeni_paypal_url');
+    $paypal_api_url = get_site_option('changeni_paypal_api_url');
+    $paypal_api_version = get_site_option('changeni_paypal_api_version');
+    $paypal_api_username = get_site_option('changeni_paypal_api_username');
+    $paypal_api_password = get_site_option('changeni_paypal_api_password');
+    $paypal_api_password = base64_decode($paypal_api_password);
+    $paypal_api_signature = get_site_option('changeni_paypal_api_signature');
 
-                    <?php
-                      }
-                    ?>
-            </form>
-        <?php
-        $one_time_form = ob_get_contents();
-    ob_end_clean();
+    $credentials = '&VERSION=' . urlencode($paypal_api_version) . '&PWD=' . urlencode($paypal_api_password) . '&USER=' . urlencode($paypal_api_username) . '&SIGNATURE=' . urlencode($paypal_api_signature);
+ 
+    $token = $_REQUEST['token'];
 
-    return $one_time_form;
+    if(!isset($token)) {
+        $ipn_url_parts = parse_url($ipn_url);
+        $base_url = $ipn_url_parts['scheme'] . '://' . $ipn_url_parts['host'];
+
+        $return_url = $base_url . '/changeni/process/';
+        if(!empty($ipn_url_parts['query'])){
+            $return_url .= '?' . $ipn_url_parts['query'];
+        }
+
+        $return_url = urlencode($return_url);
+        $cancel_url = urlencode(get_site_option('changeni_cancel_page'));
+
+        $nvp_request = '&PAYMENTREQUEST_0_PAYMENTACTION=Sale' . '&PAYMENTREQUEST_0_CURRENCYCODE=USD' ;
+        $nvp_request .= '&NOSHIPPING=1' . '&ALLOWNOTE=0' . '' ;
+
+        $total_amount = 0.00;
+        $item_name = '';
+        $item_number = '';
+        $amount = 0.00;
+        $quantity = 1;
+
+        $item_count = 0;
+        foreach ( $cart_items as $blog_id => $donation ) {
+            $total_amount += $donation['amount'];
+            $item_name = urlencode($donation['name']);
+            $item_number = urlencode($blog_id . '-' . $donation['short_name']);
+            $amount = $donation['amount'];
+            
+            $nvp_request .= "&L_PAYMENTREQUEST_0_NAME$item_count=" . $item_name . "&L_PAYMENTREQUEST_0_AMT$item_count=" . $amount ;
+            $nvp_request .= "&L_PAYMENTREQUEST_0_QTY$item_count=" . $quantity . "&L_PAYMENTREQUEST_0_NUMBER$item_count=" . $item_number;
+
+            $item_count++;
+        }
+
+        $nvp_request .= '&PAYMENTREQUEST_0_AMT=' . $total_amount . '&PAYMENTREQUEST_0_ITEMAMT=' . $total_amount . '&MAXAMT=' . $total_amount;
+        $nvp_request .= "&RETURNURL=$return_url&CANCELURL=$cancel_url";
+
+        $nvp_request = $credentials . $nvp_request;
+
+        $http_parsed_response_array = changeni_call_paypal_api('SetExpressCheckout', $nvp_request, $paypal_api_url);
+
+        $ack = strtoupper($http_parsed_response_array["ACK"]);
+        if($ack == 'SUCCESS' || $ack == 'SUCCESSWITHWARNING') {
+                // Redirect to paypal.com.
+                $token = urldecode($http_parsed_response_array["TOKEN"]);
+                $paypal_url = "$paypal_url&cmd=_express-checkout&token=$token";
+
+                header("Location: $paypal_url");
+                exit;
+        } else  {
+                exit('SetExpressCheckout failed: ' . print_r($http_parsed_response_array, true));
+        }
+
+
+    }
+    else{
+        $token = urlencode( $_REQUEST['token']);
+        $nvp_request = "&TOKEN=" . $token;
+        
+        $nvp_request = $credentials . $nvp_request;
+        
+        $http_parsed_response_array = changeni_call_paypal_api('GetExpressCheckoutDetails', $nvp_request, $paypal_api_url);
+
+        //$_SESSION['reshash']=$resArray;
+        $ack = strtoupper($http_parsed_response_array["ACK"]);
+
+       if($ack == 'SUCCESS' || $ack == 'SUCCESSWITHWARNING'){
+            $token = urlencode( $http_parsed_response_array['TOKEN']);
+            $payer_id = urlencode($http_parsed_response_array['PAYERID']);
+            $total_amount = urlencode($http_parsed_response_array['PAYMENTREQUEST_0_AMT']);
+
+            $nvp_request = "&TOKEN=" . $token . '&PAYERID=' . $payer_id;  
+            $nvp_request .= '&PAYMENTREQUEST_0_PAYMENTACTION=Sale' . '&PAYMENTREQUEST_0_CURRENCYCODE=USD' ;
+            $nvp_request .= '&NOSHIPPING=1' . '&ALLOWNOTE=0' . '' ;
+
+            $item_count = 0;
+            foreach ( $cart_items as $blog_id => $donation ) {
+                $item_name = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_0_NAME$item_count"]);
+                $item_number = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_0_NUMBER$item_count"]);
+                $amount = $http_parsed_response_array["L_PAYMENTREQUEST_0_AMT$item_count"];
+                $quantity = $http_parsed_response_array["L_PAYMENTREQUEST_0_QTY$item_count"];
+
+                $nvp_request .= "&L_PAYMENTREQUEST_0_NAME$item_count=" . $item_name . "&L_PAYMENTREQUEST_0_AMT$item_count=" . $amount ;
+                $nvp_request .= "&L_PAYMENTREQUEST_0_QTY$item_count=" . $quantity . "&L_PAYMENTREQUEST_0_NUMBER$item_count=" . $item_number;
+
+                $item_count++;
+            }
+
+            $nvp_request .= '&PAYMENTREQUEST_0_AMT=' . $total_amount . '&PAYMENTREQUEST_0_ITEMAMT=' . $total_amount . '&MAXAMT=' . $total_amount;
+            $nvp_request .= '&PAYMENTREQUEST_0_NOTIFYURL=' . urlencode($ipn_url);
+
+            $nvp_request = $credentials . $nvp_request;
+            
+            $http_parsed_response_array = changeni_call_paypal_api('DoExpressCheckoutPayment', $nvp_request, $paypal_api_url);
+
+            $ack = strtoupper($http_parsed_response_array["ACK"]);
+            
+            if($ack == 'SUCCESS' || $ack == 'SUCCESSWITHWARNING'){
+                header("Location: $thanks_page_url");
+                exit;
+            }
+            else{
+                exit('DoExpressCheckoutPayment failed: ' . print_r($http_parsed_response_array, true));
+            }
+        }
+        else{
+            exit('GetExpressCheckoutDetails failed: ' . print_r($http_parsed_response_array, true));
+        }
+    }
+
 }
 
+
+function changeni_call_paypal_api($methodName, $nvp_params, $paypal_api_url) {
+    
+    $nvp_request = "METHOD=$methodName" . $nvp_params;
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $paypal_api_url);
+    curl_setopt($ch, CURLOPT_VERBOSE, 1);
+
+    // Turn off the server and peer verification (TrustManager Concept).
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, FALSE);
+
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_POST, 1);
+
+    // Set the request as a POST FIELD for curl.
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $nvp_request);
+
+    // Get response from the server.
+    $http_response = curl_exec($ch);
+
+    if(!$http_response) {
+            exit("$methodName failed: " . curl_error($ch) . '(' . curl_errno($ch) . ')');
+    }
+
+    // Extract the response details.
+    $http_response_array = explode("&", $http_response);
+
+    $http_parsed_response_array = array();
+    foreach ($http_response_array as $i => $value) {
+            $tmp_array = explode("=", $value);
+            if(sizeof($tmp_array) > 1) {
+                    $http_parsed_response_array[$tmp_array[0]] = urldecode($tmp_array[1]);
+            }
+    }
+
+    if((0 == sizeof($http_parsed_response_array)) || !array_key_exists('ACK', $http_parsed_response_array)) {
+            exit("Invalid HTTP Response for POST request($nvp_request) to $paypal_api_url.");
+    }
+
+    $http_parsed_response_array['METHOD_RESPONSE'] = $http_response;
+
+    return $http_parsed_response_array;
+}
+
+
+function changeni_process_payment($payment_page, $page_name){
+    $cart_items = $_SESSION['changeni_cart'];
+    
+    
+    ob_start();
+        if ( $cart_items ) {
+
+            switch(strtolower($_SESSION['changeni_cart_frequency'])){
+                case 'monthly':
+                    echo process_changeni_monthly_payment($cart_items);
+                    break;
+                case 'one-time':
+                    echo process_changeni_one_time_payment($cart_items);
+                    break;
+                default:
+                    ?>
+                        <span class="error_message">Unrecognized donation frequency</span>
+                    <?php
+                    break;
+            }
+
+        }
+
+        $page_content = ob_get_contents();
+    ob_end_clean();
+
+    $payment_page->post_content = $page_content;
+
+    return $payment_page;
+}
 
 function changeni_checkout_page($checkout_page, $page_name){
     $checkout_page = changeni_init_page($checkout_page, $page_name, 'Check-out');
@@ -602,26 +889,10 @@ function changeni_checkout_page($checkout_page, $page_name){
             <div id="donations_checkout" class="donations_ui">
                 <?php echo get_changeni_cart_listing(); ?>
                 
-                <?php
-                    if ( $cart_items ) {
-                        //$cart_total = get_changeni_cart_total($cart_items);
-
-                        switch(strtolower($_SESSION['changeni_cart_frequency'])){
-                            case 'monthly':
-                                echo get_changeni_monthly_submission($cart_items);
-                                break;
-                            case 'one-time':
-                                echo get_changeni_one_time_submission($cart_items);
-                                break;
-                            default:
-                                ?>
-                                    <span class="error_message">Unrecognized donation frequency</span>;
-                                <?php
-                                break;
-                        }
-
-                    }
-                ?>
+                <form action="/changeni/process/" method="post">
+                    <input type="submit" class="button-primary" value="Donate"/>
+                    
+                </form>
             </div>
 
         <?php
@@ -961,7 +1232,8 @@ function changeni_init() {
         add_site_option('changeni_thanks_page', 'http://' . $current_site->domain . '/changeni/thanks/');
         add_site_option('changeni_cancel_page', 'http://' . $current_site->domain . '/');
         add_site_option('changeni_paypal_account', '[Paypal email]');
-        add_site_option('changeni_recurrence_period', 'M');
+        add_site_option('changeni_recurrence_period', 'Month');
+	add_site_option('changeni_paypal_api_url', 'https://api-3t.paypal.com/nvp');
         add_site_option('changeni_paypal_api_version', '56.0');
         add_site_option('changeni_paypal_api_username', '[api_username]');
         add_site_option('changeni_paypal_api_password', '[api_password]');
@@ -984,6 +1256,7 @@ function register_changeni_settings() {
     register_setting( 'changeni_settings', 'changeni_cancel_page', 'changeni_update_cancel_page_option' );
     register_setting( 'changeni_settings', 'changeni_paypal_account', 'changeni_update_paypal_account_option' );
     register_setting( 'changeni_settings', 'changeni_recurrence_period', 'changeni_update_recurrence_period_option' );
+    register_setting( 'changeni_settings', 'changeni_paypal_api_url', 'changeni_update_paypal_api_url_option' );
     register_setting( 'changeni_settings', 'changeni_paypal_api_version', 'changeni_update_paypal_api_version_option' );
     register_setting( 'changeni_settings', 'changeni_paypal_api_username', 'changeni_update_paypal_api_username_option' );
     register_setting( 'changeni_settings', 'changeni_paypal_api_password', 'changeni_update_paypal_api_password_option' );
@@ -1076,6 +1349,20 @@ function changeni_update_recurrence_period_option($option) {
     return $option;
 }
 
+function changeni_update_paypal_api_url_option($option) {
+    global $changeni_lock_paypal_api_url_option;
+
+    if($changeni_lock_paypal_api_url_option){
+        $changeni_lock_paypal_api_url_option = false;
+    }
+    else{
+        $changeni_lock_paypal_api_url_option = true;
+        update_site_option('changeni_paypal_api_url', $option);
+    }
+
+    return $option;
+}
+
 function changeni_update_paypal_api_version_option($option) {
     global $changeni_lock_paypal_api_version_option;
 
@@ -1106,12 +1393,21 @@ function changeni_update_paypal_api_username_option($option) {
 
 function changeni_update_paypal_api_password_option($option) {
     global $changeni_lock_paypal_api_password_option;
-
+//wp_hash_password($userdata['user_pass'])
     if($changeni_lock_paypal_api_password_option){
         $changeni_lock_paypal_api_password_option = false;
     }
     else{
         $changeni_lock_paypal_api_password_option = true;
+
+        $saved_pwd = get_site_option('changeni_paypal_api_password');
+        if(empty($option)){
+            $option = $saved_pwd;
+        }
+        else{
+            //$option = wp_hash_password($option);
+            $option = base64_encode($option);
+        }
         update_site_option('changeni_paypal_api_password', $option);
     }
 
@@ -1162,7 +1458,6 @@ function changeni_plugin_actions($links) {
     return $links;
 
 }
-
 
 
 ?>
