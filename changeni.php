@@ -25,6 +25,12 @@ Author URI: http://www.dennisonwolfe.com/
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
+
+/*==========================================================================*/
+//  File stuff
+/*==========================================================================*/
+define('DEBUG_FILE_PATH', $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log');
+
 /*==========================================================================*/
 //  Database Objects
 /*==========================================================================*/
@@ -317,7 +323,8 @@ function changeni_verify_IPN($payment_info){
     if($verification['body'] == 'VERIFIED' ) {
            return $payment_info;
     } else {
-            $log_file = $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log';
+            $log_file = DEBUG_FILE_PATH;
+            //$log_file = $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log';
             $fh = fopen($log_file, 'a') or die("can't open debug file");
             $stringData = '<div>Paypal IPN verification: ' . print_r('IPN verification failure', 1) . '</div><br><br>' . "\r\n";
             fwrite($fh, $stringData);
@@ -337,12 +344,23 @@ function changeni_log_ipn_error($message, $payment_info){
     $rows_affected = $wpdb->insert( $table_name,
                                                 array( 'message' => $message,
                                                     'raw_data' => $raw_data ) );
+    if(!$rows_affected){
+        $db_error['sql_qry'] = $wpdb->last_query;
+        $db_error['sql_error'] = $wpdb->last_error;
 
+        $log_file = DEBUG_FILE_PATH;
+        $fh = fopen($log_file, 'a') or die("can't open debug file");
+	$stringData = '<div>DB error log failure: ' . print_r($db_error, 1) . '</div><br><br>' . "\r\n";
+	fwrite($fh, $stringData);
+	fclose($fh);
+
+    }
     return ;
 }
 
 function changeni_record_payment($thanks_page, $page_name){
-        $log_file = $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log';
+        $log_file = DEBUG_FILE_PATH;
+            //$log_file = $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log';
 	$fh = fopen($log_file, 'a') or die("can't open debug file");
 	$stringData = '<div>Paypal IPN: ' . print_r($_POST, 1) . '</div><br><br>' . "\r\n";
 	fwrite($fh, $stringData);
