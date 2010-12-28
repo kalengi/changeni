@@ -316,10 +316,13 @@ function changeni_verify_IPN($payment_info){
     $paypal_options = array(
             'timeout' => 5,
             'body' => $payment_info,
-            'user-agent' => ('Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.2.8) Gecko/20100722 Firefox/3.6.8 (.NET CLR 3.5.30729)')
+            'user-agent' => ('Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.2.8) Gecko/20100722 Firefox/3.6.8 (.NET CLR 3.5.30729)'),
+            'sslverify' => false //allow IPN verification to go through without SSL verification
     );
 
-    $verification = wp_remote_post($paypal_url, $paypal_options);
+    //add_filter( 'https_local_ssl_verify', '__return_false' ); //allow request to go through without SSL verification
+        $verification = wp_remote_post($paypal_url, $paypal_options);
+    //remove_filter( 'https_local_ssl_verify', '__return_false' );
     if($verification['body'] == 'VERIFIED' ) {
            return $payment_info;
     } else {
