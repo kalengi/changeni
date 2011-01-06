@@ -369,9 +369,41 @@ div.donations_ui .alternate, div.donations_ui .alt {
 }
 
 div.donations_ui .changeni_cart_form {
-    float: left;
+    float: right;
     margin-right: 6px;
 }
+
+td.ammount-summary-label-cell {
+    text-align: right;
+    font-weight: bold;
+}
+
+td.ammount-summary-cell {
+    text-align: left;
+    vertical-align: top;
+}
+
+th {
+    white-space: nowrap;
+}
+
+
+p#towngiving-incorporation-status {
+    font-size: 9px;
+}
+
+input#tg-tip-amount {
+    width: 60px;
+}
+
+div.cart-buttons{
+    text-align: right;
+}
+
+.invalid-tg-tip-amount{
+    color: #FF0000;
+}
+
 /* @end */
 
 

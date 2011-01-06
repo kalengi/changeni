@@ -96,8 +96,9 @@ function changeni_load_admin_scripts() {
 function changeni_load_scripts() {
     global $current_blog;
 
+    wp_enqueue_script('jquery-validate', CHANGENI_FOLDER . '/jquery-validate/jquery.validate.js', array('jquery'), '1.7');
     wp_enqueue_script('changeni', CHANGENI_FOLDER . '/changeni.js', array('jquery-ui-tabs', 'json2'), '1.0');
-
+    
     $ajax_url = $current_blog->path . 'wp-admin/admin-ajax.php';
     $recurrence = isset($_SESSION['changeni_cart_frequency']) ? strtolower($_SESSION['changeni_cart_frequency']) : 'none';
     wp_localize_script( 'changeni', 'changeniJsData', array( 'ajaxUrl' => $ajax_url,
@@ -174,7 +175,13 @@ function changeni_init_page($page, $page_name, $page_title){
     return $page;
 }
 
-function get_changeni_cart_listing(){
+function changeni_get_percentage($portion, $whole){
+    $percentage = $portion / $whole * 100;
+    return round($percentage);
+}
+
+function get_changeni_cart_listing($readonly = false){
+    
     $cart_items = $_SESSION['changeni_cart'];
     ob_start();
         ?>
@@ -202,24 +209,23 @@ function get_changeni_cart_listing(){
                         ?>
                         </tr>
                 </thead>
-                <tfoot>
-                        <tr>
-                        <th class="cart_count" id="cart_count_footer" scope="col">
-                                Item
-                        </th>
-                                <?php echo $column_names; ?>
-                        </tr>
-                </tfoot>
                 <tbody id="changeni-donation-list" class="list:site">
                     <?php
                     if ( $cart_items ) {
                         $class = '';
                         $item_count = 0;
+                        $amount_col_position = 0;
+                        $subtotal = 0;
                         foreach ( $cart_items as $blog_id => $donation ) {
                             $item_count++;
+                            $subtotal += $donation['amount'];
                             $class = ( 'alternate' == $class ) ? '' : 'alternate';
-                            echo "<tr class='$class'>";
+                    ?>
+                            <tr class='<?php echo $class; ?>'>
+                     <?php
+                            $col_count = 0;
                             foreach ( $columns as $column_name ) {
+                                $col_count++;
                                 switch ( strtolower($column_name) ) {
                                     case 'item_count':
                                         ?>
@@ -229,9 +235,10 @@ function get_changeni_cart_listing(){
                                         <?php
                                         break;
                                     case 'amount':
+                                        $amount_col_position = $col_count - 1;
                                         ?>
                                                 <td valign="top" scope="row" class="amount-column">
-                                                       <?php echo $donation['amount']; ?>
+                                                       $<?php echo number_format($donation['amount'], 2, '.', ','); ?>
                                                 </td>
                                         <?php
                                         break;
@@ -252,7 +259,64 @@ function get_changeni_cart_listing(){
                                         break;
                                 }
                             }
+                            ?>
+                            </tr>
+                            <?php
                         }
+                        $tg_tip_percentage = 0;
+                        $tg_tip_amount = 0;
+                        $tg_tip_amount_found = false;
+                        if (isset ( $_REQUEST['tg-tip-amount-approved'] )){
+                            $tg_tip_amount = $_REQUEST['tg-tip-amount-approved'];
+                            $tg_tip_amount = str_replace('$', '', $tg_tip_amount);
+                            $tg_tip_amount_found = is_numeric($tg_tip_amount);
+                        }
+
+                        if($tg_tip_amount_found){
+                            $tg_tip_percentage = changeni_get_percentage($tg_tip_amount, $subtotal);
+                        }
+                        else{
+                            if(isset($_SESSION['changeni_tip_amount']) && is_numeric($_SESSION['changeni_tip_amount'])){
+                                $tg_tip_amount = $_SESSION['changeni_tip_amount'];
+                                $tg_tip_percentage = changeni_get_percentage($tg_tip_amount, $subtotal);
+                            }
+                            else{
+                                $tg_tip_percentage = 15;
+                                $tg_tip_amount = $tg_tip_percentage / 100 * $subtotal;
+                            }
+                            
+                        }
+                        
+                        $_SESSION['changeni_tip_amount'] = $tg_tip_amount;
+                        $total_amount = $subtotal + $tg_tip_amount;
+                        $tg_tip_disabled = ($readonly) ? 'disabled="disabled"' : '';
+                        ?>
+                            <tr>
+                                    <td class="ammount-summary-label-cell" colspan="<?php echo $amount_col_position; ?>">Subtotal:</td>
+                                    <td class="ammount-summary-cell" colspan="<?php echo count( $columns ) - $amount_col_position; ?>">$<?php echo number_format($subtotal, 2, '.', ','); ?></td>
+                            </tr>
+                            <tr>
+                                    <td class="ammount-summary-label-cell" colspan="<?php echo $amount_col_position; ?>">
+                                        100% of your donation is passed through! <br />
+                                        Please help us with a voluntary contribution to Site Overhead.
+                                        <p id="towngiving-incorporation-status">
+                                            TownGiving, Inc. is a 501©(3) non-profit #C3092021. This contribution may also be tax-deductible. 
+                                        </p>
+                                    </td>
+                                    <td class="ammount-summary-cell" >
+                                        <form id="tg-tip-amount-validator" action="#">
+                                            <input type="text" name="tg_tip_amount" id="tg_tip_amount" <?php echo $tg_tip_disabled; ?> value="$<?php echo number_format($tg_tip_amount, 2, '.', ','); ?>">
+                                            <input type="hidden" name="donation-subtotal" id="donation-subtotal" value="<?php echo $subtotal; ?>">
+                                        </form>
+                                    </td>
+                                    <td class="ammount-summary-cell" ><label id="tg_tip_percentage"><?php echo $tg_tip_percentage; ?></label>%</td>
+                            </tr>
+                            <tr>
+                                    <td class="ammount-summary-label-cell" colspan="<?php echo $amount_col_position; ?>">Total:</td>
+                                    <td class="ammount-summary-cell" >$<label id="tg_tip_total"><?php echo number_format($total_amount, 2, '.', ','); ?></label></td>
+                                    <td ><?php echo $_SESSION['changeni_cart_frequency']; ?></td>
+                            </tr>
+                        <?php
                     }
                     else {
                     ?>
@@ -283,16 +347,19 @@ function changeni_cart_page($cart_page, $page_name){
                 <?php
                     if ( $cart_items ) {
                     ?>
-                        <form method="post" action="/changeni/checkout/" class="changeni_cart_form">
-                            <p class="submit">
-                                <input type="submit" class="button-primary" value="Checkout"/>
-                            </p>
-                        </form>
-                        <form method="post" action="/changeni/cancel/" class="changeni_cart_form">
-                            <p class="submit">
-                                <input type="submit" class="button-secondary" value="Clear"/>
-                            </p>
-                        </form>
+                           <div id="tg-tip-validate-error"><ul></ul></div>
+                                <form method="post" action="/changeni/cancel/" class="changeni_cart_form">
+                                    <p class="submit">
+                                        <input type="submit" class="button-secondary" value="Clear"/>
+                                    </p>
+                                </form>
+                                <form method="post" action="/changeni/checkout/" class="changeni_cart_form">
+                                    <input type="hidden" name="tg-tip-amount-approved" id="tg-tip-amount-approved" value="$<?php echo number_format($_SESSION['changeni_tip_amount'], 2, '.', ','); ?>">
+                                    <p class="submit">
+                                        <input type="submit" class="button-primary" value="Checkout"/>
+                                    </p>
+                                </form>
+                        
                     <?php
                     }
                 ?>
@@ -320,14 +387,11 @@ function changeni_verify_IPN($payment_info){
             'sslverify' => false //allow IPN verification to go through without SSL verification
     );
 
-    //add_filter( 'https_local_ssl_verify', '__return_false' ); //allow request to go through without SSL verification
-        $verification = wp_remote_post($paypal_url, $paypal_options);
-    //remove_filter( 'https_local_ssl_verify', '__return_false' );
+    $verification = wp_remote_post($paypal_url, $paypal_options);
     if($verification['body'] == 'VERIFIED' ) {
            return $payment_info;
     } else {
             $log_file = DEBUG_FILE_PATH;
-            //$log_file = $_SERVER['DOCUMENT_ROOT'] . '\wp-content\debug_output\debug_output.log';
             $fh = fopen($log_file, 'a') or die("can't open debug file");
             $stringData = '<div>Paypal IPN verification: ' . print_r('IPN verification failure', 1) . '</div><br><br>' . "\r\n";
             fwrite($fh, $stringData);
@@ -516,6 +580,7 @@ function changeni_thanks_page($thanks_page, $page_name){
 function changeni_clear_session(){
     unset ($_SESSION['changeni_cart']);
     unset ($_SESSION['changeni_cart_frequency']);
+    unset ($_SESSION['changeni_tip_amount']);
 }
 
 function changeni_clear_cart($thanks_page, $page_name){
@@ -585,17 +650,22 @@ function process_changeni_monthly_payment($cart_items){
         foreach ( $cart_items as $blog_id => $donation ) {
             $total_amount += $donation['amount'];
             $item_name = urlencode($donation['name']);
-            //$item_number = urlencode($blog_id . '-' . $donation['short_name']);
-            //$amount = $donation['amount'];
 
-            //$nvp_request .= "&PAYMENTREQUEST_$item_count".'_PAYMENTACTION=Sale' . "&PAYMENTREQUEST_$item_count".'_CURRENCYCODE=USD' ;
-            //$nvp_request .= "&PAYMENTREQUEST_$item_count".'_CURRENCYCODE=USD' . "&PAYMENTREQUEST_$item_count".'_AMT=' . $amount ;
             $nvp_request .= "&L_BILLINGTYPE$item_count=RecurringPayments" ;
             $nvp_request .= "&L_BILLINGAGREEMENTDESCRIPTION$item_count=" . $item_name; // . $subscription_suffix ;
-            //$nvp_request .= "&L_PAYMENTREQUEST_$item_count".'_NAME0=' . $item_name . "&L_PAYMENTREQUEST_$item_count".'_AMT0=' . $amount ;
-            //$nvp_request .= "&L_PAYMENTREQUEST_$item_count".'_QTY0=' . $quantity . "&L_PAYMENTREQUEST_$item_count".'_NUMBER0=' . $item_number;
-
             
+            
+            $item_count++;
+        }
+
+        if(isset($_SESSION['changeni_tip_amount']) && is_numeric($_SESSION['changeni_tip_amount']) && $_SESSION['changeni_tip_amount'] > 0){
+            $total_amount += $_SESSION['changeni_tip_amount'];
+            $item_name = urlencode('Site Tip');
+
+            $nvp_request .= "&L_BILLINGTYPE$item_count=RecurringPayments" ;
+            $nvp_request .= "&L_BILLINGAGREEMENTDESCRIPTION$item_count=" . $item_name; // . $subscription_suffix ;
+            
+
             $item_count++;
         }
 
@@ -633,27 +703,16 @@ function process_changeni_monthly_payment($cart_items){
             $token = urlencode( $http_parsed_response_array['TOKEN']);
             $payer_id = urlencode($http_parsed_response_array['PAYERID']);
             $payer_email = urlencode($http_parsed_response_array['EMAIL']);
-            //$total_amount = urlencode($http_parsed_response_array['PAYMENTREQUEST_0_AMT']);
             $billing_frequency = 1;
 
             $profile_start_date = $http_parsed_response_array["TIMESTAMP"];
-            //$date_parts = explode('T', $profile_start_date); //example $profile_start_date = 2010-12-22T01:45:01Z
-            //$next_date = strtotime(date("Y-m-d", strtotime($profile_start_date)) . " +1 " . strtolower($recurrence_period));
-            //$next_date = date('Y-m-dTH:i:sZ', $next_date);
-            //$next_date = substr($next_date, 0, 10);
-            //$profile_start_date = $next_date . 'T' . $date_parts[1];
             $profile_start_date = urlencode($profile_start_date);
             
             
             $item_count = 0;
             foreach ( $cart_items as $blog_id => $donation ) {
-                //$item_name = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_$item_count".'_NAME0']);
-                //$item_number = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_$item_count".'_NUMBER0']);
-                //$amount = $http_parsed_response_array["L_PAYMENTREQUEST_$item_count".'_AMT0'];
-                //$currency = $http_parsed_response_array["PAYMENTREQUEST_$item_count".'_CURRENCYCODE'];
-                //$quantity = $http_parsed_response_array["L_PAYMENTREQUEST_$item_count".'_QTY0'];
                 $item_name = urlencode($donation['name']);
-                $item_number = urlencode($blog_id . '-' . $donation['short_name']);
+                $item_number = urlencode(changeni_create_item_code($blog_id, $donation['short_name']));
                 $amount = $donation['amount'];
                 $currency = 'USD';
                 
@@ -663,9 +722,7 @@ function process_changeni_monthly_payment($cart_items){
                 $nvp_request .= '&PROFILESTARTDATE=' . $profile_start_date . '&PROFILEREFERENCE=' . $item_number . '&DESC=' . $item_name; // . $subscription_suffix;
                 $nvp_request .= "&L_BILLINGTYPE$item_count=RecurringPayments" . '&BILLINGPERIOD=' . $recurrence_period . '&BILLINGFREQUENCY=' . $billing_frequency;
                 $nvp_request .= '&AMT=' . $amount; // . '&INITAMT=' . $amount;
-                //$nvp_request .= '&TRIALBILLINGPERIOD=' . $recurrence_period . '&TRIALBILLINGFREQUENCY=' . $billing_frequency . '&TRIALAMT=0';
-                //$nvp_request .= '&TRIALTOTALBILLINGCYCLES=1' . '&INITAMT=' . $amount . '&FAILEDINITAMTACTION=ContinueOnFailure' ;
-
+                
                 $nvp_request = $credentials . $nvp_request;
 
                 $http_parsed_response_array = changeni_call_paypal_api('CreateRecurringPaymentsProfile', $nvp_request, $paypal_api_url);
@@ -679,6 +736,31 @@ function process_changeni_monthly_payment($cart_items){
                 $item_count++;
             }
 
+            if(isset($_SESSION['changeni_tip_amount']) && is_numeric($_SESSION['changeni_tip_amount']) && $_SESSION['changeni_tip_amount'] > 0){
+                $item_name = urlencode('Site Tip');
+                $item_number = urlencode(changeni_create_item_code(1, 'TIP'));
+                $amount = $_SESSION['changeni_tip_amount'];
+                $currency = 'USD';
+
+
+                $nvp_request = "&TOKEN=" . $token . '&PAYERID=' . $payer_id . '&EMAIL=' . $payer_email . '&CURRENCYCODE=' . $currency;
+                $nvp_request .= '&NOSHIPPING=1' . '&ALLOWNOTE=0' . '&AUTOBILLAMT=AddToNextBilling'  ;
+                $nvp_request .= '&PROFILESTARTDATE=' . $profile_start_date . '&PROFILEREFERENCE=' . $item_number . '&DESC=' . $item_name; // . $subscription_suffix;
+                $nvp_request .= "&L_BILLINGTYPE$item_count=RecurringPayments" . '&BILLINGPERIOD=' . $recurrence_period . '&BILLINGFREQUENCY=' . $billing_frequency;
+                $nvp_request .= '&AMT=' . $amount; // . '&INITAMT=' . $amount;
+
+                $nvp_request = $credentials . $nvp_request;
+
+                $http_parsed_response_array = changeni_call_paypal_api('CreateRecurringPaymentsProfile', $nvp_request, $paypal_api_url);
+
+                $ack = strtoupper($http_parsed_response_array["ACK"]);
+
+                if(!($ack == 'SUCCESS' || $ack == 'SUCCESSWITHWARNING')){
+                    exit("CreateRecurringPaymentsProfile failed for $item_name: " . print_r($http_parsed_response_array, true));
+                }
+
+                $item_count++;
+            }
             
             header("Location: $thanks_page_url");
             exit;
@@ -690,6 +772,10 @@ function process_changeni_monthly_payment($cart_items){
     }
 
     
+}
+
+function changeni_create_item_code($id, $short_name){
+    return $id . '-' . $short_name;
 }
 
 function process_changeni_one_time_payment($cart_items){
@@ -736,9 +822,21 @@ function process_changeni_one_time_payment($cart_items){
         foreach ( $cart_items as $blog_id => $donation ) {
             $total_amount += $donation['amount'];
             $item_name = urlencode($donation['name']);
-            $item_number = urlencode($blog_id . '-' . $donation['short_name']);
+            $item_number = urlencode(changeni_create_item_code($blog_id, $donation['short_name']));
             $amount = $donation['amount'];
             
+            $nvp_request .= "&L_PAYMENTREQUEST_0_NAME$item_count=" . $item_name . "&L_PAYMENTREQUEST_0_AMT$item_count=" . $amount ;
+            $nvp_request .= "&L_PAYMENTREQUEST_0_QTY$item_count=" . $quantity . "&L_PAYMENTREQUEST_0_NUMBER$item_count=" . $item_number;
+
+            $item_count++;
+        }
+
+        if(isset($_SESSION['changeni_tip_amount']) && is_numeric($_SESSION['changeni_tip_amount']) && $_SESSION['changeni_tip_amount'] > 0){
+            $total_amount += $_SESSION['changeni_tip_amount'];
+            $item_name = urlencode('Site Tip');
+            $item_number = urlencode(changeni_create_item_code(1, 'TIP'));
+            $amount = $_SESSION['changeni_tip_amount'];
+
             $nvp_request .= "&L_PAYMENTREQUEST_0_NAME$item_count=" . $item_name . "&L_PAYMENTREQUEST_0_AMT$item_count=" . $amount ;
             $nvp_request .= "&L_PAYMENTREQUEST_0_QTY$item_count=" . $quantity . "&L_PAYMENTREQUEST_0_NUMBER$item_count=" . $item_number;
 
@@ -774,7 +872,6 @@ function process_changeni_one_time_payment($cart_items){
         
         $http_parsed_response_array = changeni_call_paypal_api('GetExpressCheckoutDetails', $nvp_request, $paypal_api_url);
 
-        //$_SESSION['reshash']=$resArray;
         $ack = strtoupper($http_parsed_response_array["ACK"]);
 
        if($ack == 'SUCCESS' || $ack == 'SUCCESSWITHWARNING'){
@@ -788,6 +885,18 @@ function process_changeni_one_time_payment($cart_items){
 
             $item_count = 0;
             foreach ( $cart_items as $blog_id => $donation ) {
+                $item_name = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_0_NAME$item_count"]);
+                $item_number = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_0_NUMBER$item_count"]);
+                $amount = $http_parsed_response_array["L_PAYMENTREQUEST_0_AMT$item_count"];
+                $quantity = $http_parsed_response_array["L_PAYMENTREQUEST_0_QTY$item_count"];
+
+                $nvp_request .= "&L_PAYMENTREQUEST_0_NAME$item_count=" . $item_name . "&L_PAYMENTREQUEST_0_AMT$item_count=" . $amount ;
+                $nvp_request .= "&L_PAYMENTREQUEST_0_QTY$item_count=" . $quantity . "&L_PAYMENTREQUEST_0_NUMBER$item_count=" . $item_number;
+
+                $item_count++;
+            }
+
+            if(isset($_SESSION['changeni_tip_amount']) && is_numeric($_SESSION['changeni_tip_amount']) && $_SESSION['changeni_tip_amount'] > 0){
                 $item_name = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_0_NAME$item_count"]);
                 $item_number = urlencode($http_parsed_response_array["L_PAYMENTREQUEST_0_NUMBER$item_count"]);
                 $amount = $http_parsed_response_array["L_PAYMENTREQUEST_0_AMT$item_count"];
@@ -908,9 +1017,9 @@ function changeni_checkout_page($checkout_page, $page_name){
     ob_start();
         ?>
             <div id="donations_checkout" class="donations_ui">
-                <?php echo get_changeni_cart_listing(); ?>
+                <?php echo get_changeni_cart_listing(true); ?>
                 
-                <form action="/changeni/process/" method="post">
+                <form action="/changeni/process/" method="post" class="changeni_cart_form">
                     <input type="submit" class="button-primary" value="Donate"/>
                     
                 </form>

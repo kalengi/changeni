@@ -5,33 +5,68 @@
  */ 
  
 (
-	function(jQ){
+
+        function(jQ){
 		changeni =
 		{
 		siteUrl: '',
 		init : function(){
                             var ls=jQ("#changeni_network_list");
-                            if(ls.html() == null){
-                                return;
-                            }
-
-                            ls.change(function(){
-                                    var url = jQ(this).val();
-                                    jQ(location).attr('href',url);
-                                    return false;
-                            });
-
-                            if(jQ("#changeni_donation_box_content").html() == null){
-                                return;
+                            if(ls.html() !== null){
+                                ls.change(function(){
+                                        var url = jQ(this).val();
+                                        jQ(location).attr('href',url);
+                                        return false;
+                                });
                             }
                             
-                            var f=jQ("#changeni_donation_form form");
-                            f.submit(function(){
-                                    changeni.addToCart(this);
-                                    return false;
-                            });
 
-                            changeni.updateDonationForm();
+                            if(jQ("#changeni_donation_box_content").html() !== null){
+                                var f=jQ("#changeni_donation_form form");
+                                f.submit(function(){
+                                        changeni.addToCart(this);
+                                        return false;
+                                });
+
+                                changeni.updateDonationForm();
+                            }
+
+                            var v=jQ("#tg-tip-amount-validator");
+                            if(v.html() !== null){
+                                v.validate({
+                                    event: 'change',
+                                    rules:
+                                    {
+                                        tg_tip_amount: {changeniValidateDollarAmount:true}
+                                    },
+                                    messages:
+                                    {
+                                        tg_tip_amount: {changeniValidateDollarAmount:"Please enter a valid dollar amount"}
+                                    },
+
+                                    errorClass: "invalid-tg-tip-amount",
+                                    errorContainer:"#tg-tip-validate-error",
+                                    errorLabelContainer:"#tg-tip-validate-error ul",
+                                    wrapper:"li"
+                                });
+
+                                jQ("#tg_tip_amount").change(function(){
+                                        debugger;
+                                        var p=jQ(this);
+                                        if(p.hasClass("invalid-tg-tip-amount")){
+                                            return false;
+                                        }
+                                        var subtotal = jQ("#donation-subtotal").val()*1.00;
+                                        var tip = p.val().replace('$', '')*1.00;
+                                        var total = tip+subtotal;
+                                        jQ("#tg_tip_percentage").html(Math.round(tip/subtotal*100));
+                                        jQ("#tg_tip_total").html(total.toFixed(2));
+                                        jQ("#tg-tip-amount-approved").val(tip);
+                                        return true;
+                                });
+                            }
+                            
+                            
                         },
 		updateDonationForm : function(){
                             var recurrence=changeniJsData.recurrence;
@@ -78,6 +113,14 @@
 		
 		jQ(document).ready(function(){
                                 changeni.init();
-                        })
+                        });
+                
+                // add the validate dollar amount method
+                jQ.validator.addMethod("changeniValidateDollarAmount", function(value, element) {
+                        return this.optional(element) || /^(\$)?(\d{1,3})(\.\d{1,2})?$/.test(value);
+                });
+
 	}
+
 )(jQuery);
+
