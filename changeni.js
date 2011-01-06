@@ -56,9 +56,14 @@
                                         if(p.hasClass("invalid-tg-tip-amount")){
                                             return false;
                                         }
+
                                         var subtotal = jQ("#donation-subtotal").val()*1.00;
                                         var tip = p.val().replace('$', '')*1.00;
                                         var total = tip+subtotal;
+                                        var tipFormat = tip.toFixed(2).toString();
+                                        tipFormat = '$' + tipFormat;
+
+                                        jQ("#tg_tip_amount").val(tipFormat);
                                         jQ("#tg_tip_percentage").html(Math.round(tip/subtotal*100));
                                         jQ("#tg_tip_total").html(total.toFixed(2));
                                         jQ("#tg-tip-amount-approved").val(tip);
