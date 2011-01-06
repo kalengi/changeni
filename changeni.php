@@ -297,10 +297,9 @@ function get_changeni_cart_listing($readonly = false){
                             </tr>
                             <tr>
                                     <td class="ammount-summary-label-cell" colspan="<?php echo $amount_col_position; ?>">
-                                        100% of your donation is passed through! <br />
-                                        Please help us with a voluntary contribution to Site Overhead.
+                                        <?php echo get_site_option('changeni_overhead_caption'); ?>
                                         <p id="towngiving-incorporation-status">
-                                            TownGiving, Inc. is a 501©(3) non-profit #C3092021. This contribution may also be tax-deductible. 
+                                            <?php echo get_site_option('changeni_incorporation_caption'); ?>
                                         </p>
                                     </td>
                                     <td class="ammount-summary-cell" >
@@ -610,6 +609,8 @@ function changeni_clear_cart($thanks_page, $page_name){
 
 
 function process_changeni_monthly_payment($cart_items){
+    global $current_site;
+
     if(!isset($cart_items) || !is_array($cart_items)){
         return '';
     }
@@ -665,7 +666,7 @@ function process_changeni_monthly_payment($cart_items){
 
         if(isset($_SESSION['changeni_tip_amount']) && is_numeric($_SESSION['changeni_tip_amount']) && $_SESSION['changeni_tip_amount'] > 0){
             $total_amount += $_SESSION['changeni_tip_amount'];
-            $item_name = urlencode('Site Tip');
+            $item_name = urlencode($current_site->site_name . ' Site Overhead');
 
             $nvp_request .= "&L_BILLINGTYPE$item_count=RecurringPayments" ;
             $nvp_request .= "&L_BILLINGAGREEMENTDESCRIPTION$item_count=" . $item_name; // . $subscription_suffix ;
@@ -742,7 +743,7 @@ function process_changeni_monthly_payment($cart_items){
             }
 
             if(isset($_SESSION['changeni_tip_amount']) && is_numeric($_SESSION['changeni_tip_amount']) && $_SESSION['changeni_tip_amount'] > 0){
-                $item_name = urlencode('Site Tip');
+                $item_name = urlencode($current_site->site_name . ' Site Overhead');
                 $item_number = urlencode(changeni_create_item_code(1, 'TIP'));
                 $amount = $_SESSION['changeni_tip_amount'];
                 $currency = 'USD';
@@ -784,6 +785,8 @@ function changeni_create_item_code($id, $short_name){
 }
 
 function process_changeni_one_time_payment($cart_items){
+    global $current_site;
+
     if(!isset($cart_items) || !is_array($cart_items)){
         return '';
     }
@@ -838,7 +841,7 @@ function process_changeni_one_time_payment($cart_items){
 
         if(isset($_SESSION['changeni_tip_amount']) && is_numeric($_SESSION['changeni_tip_amount']) && $_SESSION['changeni_tip_amount'] > 0){
             $total_amount += $_SESSION['changeni_tip_amount'];
-            $item_name = urlencode('Site Tip');
+            $item_name = urlencode($current_site->site_name . ' Site Overhead');
             $item_number = urlencode(changeni_create_item_code(1, 'TIP'));
             $amount = $_SESSION['changeni_tip_amount'];
 
@@ -1361,7 +1364,7 @@ function changeni_init() {
     $wp_rewrite->flush_rules();
 
 
-    if(!get_site_option('changeni_paypal_api_signature')){
+    if(!get_site_option('changeni_incorporation_caption')){
 	add_site_option('changeni_paypal_url', 'https://www.paypal.com/cgi-bin/webscr');
 	add_site_option('changeni_ipn_url', 'http://' . $current_site->domain . '/changeni/paid/');
         add_site_option('changeni_thanks_page', 'http://' . $current_site->domain . '/changeni/thanks/');
@@ -1373,7 +1376,8 @@ function changeni_init() {
         add_site_option('changeni_paypal_api_username', '[api_username]');
         add_site_option('changeni_paypal_api_password', '[api_password]');
         add_site_option('changeni_paypal_api_signature', '[api_signature]');
-
+        add_site_option('changeni_overhead_caption', '100% of your donation is passed through!');
+        add_site_option('changeni_incorporation_caption', 'This contribution may also be tax-deductible.');
     }
 
     changeni_update_database();
@@ -1396,6 +1400,8 @@ function register_changeni_settings() {
     register_setting( 'changeni_settings', 'changeni_paypal_api_username', 'changeni_update_paypal_api_username_option' );
     register_setting( 'changeni_settings', 'changeni_paypal_api_password', 'changeni_update_paypal_api_password_option' );
     register_setting( 'changeni_settings', 'changeni_paypal_api_signature', 'changeni_update_paypal_api_signature_option' );
+    register_setting( 'changeni_settings', 'changeni_overhead_caption', 'changeni_update_overhead_caption_option' );
+    register_setting( 'changeni_settings', 'changeni_incorporation_caption', 'changeni_update_incorporation_caption_option' );
 
 }
 
@@ -1558,6 +1564,34 @@ function changeni_update_paypal_api_signature_option($option) {
     else{
         $changeni_lock_paypal_api_signature_option = true;
         update_site_option('changeni_paypal_api_signature', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_overhead_caption_option($option) {
+    global $changeni_lock_overhead_caption_option;
+
+    if($changeni_lock_overhead_caption_option){
+        $changeni_lock_overhead_caption_option = false;
+    }
+    else{
+        $changeni_lock_overhead_caption_option = true;
+        update_site_option('changeni_overhead_caption', $option);
+    }
+
+    return $option;
+}
+
+function changeni_update_incorporation_caption_option($option) {
+    global $changeni_lock_incorporation_caption_option;
+
+    if($changeni_lock_incorporation_caption_option){
+        $changeni_lock_incorporation_caption_option = false;
+    }
+    else{
+        $changeni_lock_incorporation_caption_option = true;
+        update_site_option('changeni_incorporation_caption', $option);
     }
 
     return $option;

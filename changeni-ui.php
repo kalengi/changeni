@@ -119,6 +119,8 @@ function changeni_remove_settings(){
 								'Paypal API Username' => 'changeni_paypal_api_username',
 								'Paypal API Password' => 'changeni_paypal_api_password',
 								'Paypal API Signature' => 'changeni_paypal_api_signature',
+								'Site Overhead Caption' => 'changeni_overhead_caption',
+								'Incorporation Caption' => 'changeni_incorporation_caption',
 								'DB version' => 'changeni_db_version');
 					foreach($changeni_options as $option_key => $option_value){
 						$delete_setting = delete_site_option($option_value);
@@ -230,6 +232,8 @@ function changeni_options_tab(){
                     <?php $changeni_paypal_api_username = get_site_option('changeni_paypal_api_username'); ?>
                     <?php $changeni_paypal_api_password = ''; ?>
                     <?php $changeni_paypal_api_signature = get_site_option('changeni_paypal_api_signature'); ?>
+                    <?php $changeni_overhead_caption = get_site_option('changeni_overhead_caption'); ?>
+                    <?php $changeni_incorporation_caption = get_site_option('changeni_incorporation_caption'); ?>
 
                     <table class="form-table">
                         <tr valign="top">
@@ -296,6 +300,18 @@ function changeni_options_tab(){
                             <th scope="row">Paypal API Signature</th>
                             <td>
                                  <input name="changeni_paypal_api_signature" type="text" value="<?php echo $changeni_paypal_api_signature; ?>"  />
+                            </td>
+                        </tr>
+                        <tr valign="top">
+                            <th scope="row">Site Overhead Caption</th>
+                            <td>
+                                 <input name="changeni_overhead_caption" type="text" value="<?php echo $changeni_overhead_caption; ?>"  />
+                            </td>
+                        </tr>
+                        <tr valign="top">
+                            <th scope="row">Incorporation Caption</th>
+                            <td>
+                                 <input name="changeni_incorporation_caption" type="text" value="<?php echo $changeni_incorporation_caption; ?>"  />
                             </td>
                         </tr>
                     </table>
