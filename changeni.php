@@ -1252,7 +1252,7 @@ function display_changeni_bar(){
     ?>
         <div id="changeni_bar">
             <a href="/" class="main_site_link">
-                <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/hat.png'; ?>" id="changeni_logo"  alt="changeni logo"/>
+                <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/tg-logo20.png'; ?>" id="changeni_logo"  alt="changeni logo"/>
                 <h2><?php echo $current_site->site_name ; ?></h2>
                 
             </a>
@@ -1277,6 +1277,7 @@ function display_changeni_bar(){
             </select>
 
             <a href="<?php echo $cart_url ; ?>" class="changeni_bar_info">
+                <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/cart.png'; ?>" id="changeni_cart_img"  alt="changeni cart image"/>
                 <div class="changeni_bar_info" >Total amount: <span id="changeni_amount_total">$<?php echo $cart_total->amount_total ; ?></span></div>
                 <div class="changeni_bar_info" > Total items: <span id="changeni_item_count"><?php echo $cart_total->item_count ; ?></span></div>
                 <div class="changeni_bar_info" id="info_message"></div>

@@ -333,7 +333,8 @@ div#changeni_bar h2 {
 
 div.changeni_bar_info {
     float: right;
-    padding-right: 10px;
+    padding-right: 6px;
+    padding-left: 4px;
 }
 
 a.changeni_bar_info, div.changeni_bar_info a {
