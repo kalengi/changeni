@@ -336,6 +336,12 @@ div.changeni_bar_info {
     padding-right: 10px;
 }
 
+a.changeni_bar_info {
+    float: right;
+    color: #ffffff;
+    font: 12px "Lucida Grande","Lucida Sans Unicode",Tahoma,Verdana !important;
+    text-decoration: none;
+}
 
 /* @end */
 
