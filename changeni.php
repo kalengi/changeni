@@ -558,14 +558,17 @@ function changeni_record_payment($thanks_page, $page_name){
 }
 
 function changeni_thanks_page($thanks_page, $page_name){
-    changeni_clear_session();
     $thanks_page = changeni_init_page($thanks_page, $page_name, 'Thank you');
 
     ob_start();
         ?>
             <div id="donations_thanks" class="donations_ui">
-                Thanks for the donation!
+                <p id="changeni-thanks-message">Thanks for the donation!</p>
+
+                <?php echo get_changeni_cart_listing(true); ?>
+
             </div>
+
 
     <?php
         $page_content = ob_get_contents();
@@ -574,6 +577,8 @@ function changeni_thanks_page($thanks_page, $page_name){
     
     $thanks_page->post_content = $page_content;
 
+    changeni_clear_session();
+    
     return $thanks_page;
 }
 
