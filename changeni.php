@@ -116,7 +116,6 @@ function changeni_load_stylesheets() {
 /* generate changeni page */
 function changeni_page($posts) {
     global $wp_query;
-   // global $post;
     
     if (isset ( $wp_query->query_vars['show_page'] )){
         
