@@ -1116,14 +1116,16 @@ class Changeni_Widget extends WP_Widget {
                         <div class='changeni_donation_box_content' id='changeni_donation_box_content'>
                             <span class='changeni_donation_form' id='changeni_donation_form'>
                                 <form method="post" action="" >
-                                    <input name="cmd" id="changeni_cmd" type="hidden" value="add_donation"  />
-                                    <input name="action" id="changeni_action" type="hidden" value="changeni_action"  />
-                                    <input name="_ajax_nonce" id="changeni_ajax_nonce" type="hidden" value="<?php echo $changeni_nonce; ?>"  />
-                                    <label for="donation_amount">US$</label><input name="donation_amount" id="donation_amount" type="text" value=""  />
-                                    <input type="submit" class="button" value="Give" />
-                                    <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/ajax_busy.gif'; ?>" id="ajax_busy_img"  alt="changeni submitting"/>
+                                    <span class='donation_freq' id='donation_fields'>
+                                        <input name="cmd" id="changeni_cmd" type="hidden" value="add_donation"  />
+                                        <input name="action" id="changeni_action" type="hidden" value="changeni_action"  />
+                                        <input name="_ajax_nonce" id="changeni_ajax_nonce" type="hidden" value="<?php echo $changeni_nonce; ?>"  />
+                                        <label for="donation_amount">US$</label><input name="donation_amount" id="donation_amount" type="text" value=""  />
+                                        <input type="submit" class="button" value="Give" />
+                                        <img src="<?php echo WP_PLUGIN_URL . '/' . plugin_basename( dirname(__FILE__) ) . '/images/ajax_busy.gif'; ?>" id="ajax_busy_img"  alt="changeni submitting"/>
+                                    </span>
                                     <span class='donation_freq' id='donation_freq'>
-                                        <br /><input type="radio" id="donation_freq_radio_monthly" name="donation_freq_radio" class="donation_freq_radio" value="monthly" <?php echo $recurrence == 'monthly' ? 'checked="checked"' : ''; ?> /><label class="donation_freq_label" for="donation_freq_radio_monthly">monthly</label>
+                                        <input type="radio" id="donation_freq_radio_monthly" name="donation_freq_radio" class="donation_freq_radio" value="monthly" <?php echo $recurrence == 'monthly' ? 'checked="checked"' : ''; ?> /><label class="donation_freq_label" for="donation_freq_radio_monthly">monthly</label>
                                         <input type="radio" id="donation_freq_radio_once" name="donation_freq_radio" class="donation_freq_radio" value="one-time" <?php echo $recurrence == 'monthly' ? '' : 'checked="checked"'; ?> /><label class="donation_freq_label" for="donation_freq_radio_once">one-time</label>
                                     </span>
                                 </form>

@@ -266,6 +266,7 @@ div.changeni_donation_box_content input[type="radio"] {
 	border: none;
         margin-top: 10px;
         margin-left: 5px;
+        margin-right: 3px;
 }
 
 div.changeni_donation_box_content span.donation_form label.donation_freq_label {
@@ -279,6 +280,15 @@ div.changeni_donation_box_content span.action_links {
         text-align: center;
         font-size: 11px;
         font-weight: bold;
+}
+
+div.changeni_donation_box_content span.donation_freq {
+	display: block;
+        text-align: center;
+}
+
+span#donation_fields {
+	margin-top: 3px;
 }
 
 /* @end */
