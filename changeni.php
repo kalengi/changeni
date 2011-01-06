@@ -1277,7 +1277,7 @@ function display_changeni_bar(){
             </select>
 
             <a href="<?php echo $cart_url ; ?>" class="changeni_bar_info">
-                <div class="changeni_bar_info" >Total amount: <span id="changeni_amount_total"><?php echo $cart_total->amount_total ; ?></span></div>
+                <div class="changeni_bar_info" >Total amount: <span id="changeni_amount_total">$<?php echo $cart_total->amount_total ; ?></span></div>
                 <div class="changeni_bar_info" > Total items: <span id="changeni_item_count"><?php echo $cart_total->item_count ; ?></span></div>
                 <div class="changeni_bar_info" id="info_message"></div>
             </a>

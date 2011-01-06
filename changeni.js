@@ -103,7 +103,7 @@
                                             
                                             jQ("#info_message").html(result.message);
                                             jQ("#changeni_item_count").html(result.totalItems);
-                                            jQ("#changeni_amount_total").html(result.totalAmount);
+                                            jQ("#changeni_amount_total").html('$'+result.totalAmount);
 
                                             jQ("#ajax_busy_img").hide();
                                             jQ("#changeni_donation_form input[name='donation_amount']").val('');
